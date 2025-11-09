@@ -1,0 +1,5 @@
+{
+  "name": "Adaptive Monitor Brightness UI",
+  "description": "A user interface to control and fine-tune an adaptive brightness service for multiple monitors. This UI allows users to enable or disable the service per monitor and adjust various algorithm parameters.",
+  "requestFramePermissions": []
+}
