@@ -16,6 +16,7 @@ The project will be developed across three distinct phases, prioritizing stabili
 
 -   **[COMPLETED] UI-Based Monitor Mapping:** The settings modal now includes a feature to detect and select the correct `Monitorian.exe` identifier from a dropdown list, eliminating the need for manual JSON editing.
 -   **[COMPLETED] Safer Polling Loop:** The backend's `setInterval` logic has been replaced with a recursive `setTimeout` pattern, ensuring stability and preventing resource contention under heavy load.
+-   **[COMPLETED] Graceful Degradation (Demo Mode):** The frontend now automatically falls back to a read-only "Demo Mode" with sample data if the backend server is unreachable, ensuring a good user experience even when the connection is down.
 
 ### Phase 2: Productization (Next Steps)
 

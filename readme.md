@@ -7,6 +7,7 @@ A modern, full-stack application to control and fine-tune an adaptive brightness
 -   **Multi-Monitor Support:** View and manage all connected displays from a single dashboard.
 -   **UI-Based Monitor Mapping:** A simple dropdown in the settings allows you to select the correct device ID for `Monitorian.exe`, eliminating the need for manual configuration file editing.
 -   **Real-Time Status:** A WebSocket connection pushes live data from the server, showing the currently detected screen brightness and the applied monitor brightness without delay.
+-   **Graceful Fallback (Demo Mode):** If the backend server is not running, the UI automatically loads with sample data, allowing you to explore its features.
 -   **State Persistence:** All your settings are saved to a `server/config.json` file, so your configuration is preserved even after restarting the application.
 -   **Resilient Connectivity:** The application automatically handles port conflicts by trying a series of fallback ports (3001-3006).
 -   **Robust Polling:** The backend uses a safe polling mechanism to prevent performance issues, even with very fast polling intervals.
@@ -28,9 +29,10 @@ The backend (`/server` directory) is the core of the operation.
 ### Frontend (React)
 
 The frontend (`/src` directory) provides the user interface.
-1.  It dynamically finds and connects to the active backend server.
-2.  It establishes a persistent WebSocket connection to listen for live updates.
-3.  The UI is updated in real-time as messages are received, providing an accurate view of the system's state. The settings modal allows for easy configuration of all parameters, including the crucial Monitorian device ID.
+1.  It dynamically probes a list of ports to find and connect to the active backend server.
+2.  If a backend is found, it establishes a persistent WebSocket connection to listen for live updates.
+3.  **If no backend is found, it enters a read-only "Demo Mode"** with sample data to showcase the UI.
+4.  The settings modal allows for easy configuration of all parameters, including the crucial Monitorian device ID.
 
 ## Technology Stack
 
@@ -73,10 +75,19 @@ The project is already configured. Simply open a new terminal in the project's r
 
 *Note: The frontend will be served by the development environment you are using.*
 
-### Configuration
+### Troubleshooting
 
-On the first run, the application will attempt to automatically configure your monitors. If the brightness is not adjusting correctly for a specific monitor:
-1. Click the **Settings icon** on the monitor's card.
-2. Click the **"Detect"** button to find all monitors that `Monitorian.exe` can see.
-3. Select the correct ID from the **"Monitorian Device ID"** dropdown.
-4. Click **"Save Changes"**.
+**"Demo Mode" Banner is Showing**
+
+If you see a yellow banner indicating "Demo Mode," it means the frontend UI could not connect to the backend server.
+-   Ensure the backend server is running in a separate terminal.
+-   Check the server's terminal for any startup errors.
+-   Make sure you don't have a firewall blocking connections on ports `3001-3006`.
+
+**Brightness Isn't Changing**
+
+If the service is active but brightness doesn't change:
+1.  Click the **Settings icon** on the monitor's card.
+2.  Click the **"Detect"** button to find all monitors that `Monitorian.exe` can see.
+3.  Select the correct ID from the **"Monitorian Device ID"** dropdown.
+4.  Click **"Save Changes"**.

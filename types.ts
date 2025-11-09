@@ -17,4 +17,5 @@ export interface Monitor {
   targetMonitorBrightness: number;
   settings: MonitorSettings;
   error?: string | null;
+  isDemo?: boolean; // Flag to identify demo data
 }

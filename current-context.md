@@ -11,7 +11,7 @@ The system is a full-stack application composed of a Node.js backend and a React
 -   **Core Engine:** Serves as the central logic processor. It handles screen capturing, brightness calculation, and physical monitor control.
 -   **State Management:** On first launch, it discovers all connected monitors and generates a `server/config.json` file. This file persists all user settings (active state, algorithm parameters, monitor mappings) across sessions.
 -   **Communication Protocol:**
-    -   **REST API:** An Express.js server exposes endpoints for state-changing commands and configuration, including a new endpoint (`/api/monitorian-devices`) to fetch valid device names from `Monitorian.exe`.
+    -   **REST API:** An Express.js server exposes endpoints for state-changing commands and configuration, including an endpoint (`/api/monitorian-devices`) to fetch valid device names from `Monitorian.exe`.
     -   **WebSockets:** A `ws` server runs in parallel to push real-time data to the frontend, including brightness updates, status changes, and operational errors.
 -   **Polling Mechanism:** The core adaptive brightness loop uses a robust **recursive `setTimeout` pattern**, which prevents overlapping executions and ensures stable performance.
 -   **Resilience:** The server automatically tries a series of fallback ports (3001-3006) to prevent `EADDRINUSE` conflicts.
@@ -20,9 +20,10 @@ The system is a full-stack application composed of a Node.js backend and a React
 ### 2. React Frontend (`/src`)
 
 -   **User Interface:** A single-page application built with React, TypeScript, and Tailwind CSS that functions as the control panel.
--   **Real-Time Data:** It establishes a persistent WebSocket connection to the backend. All data displayed on the monitor cards is pushed from the server in real-time.
--   **Advanced Configuration:** The settings modal now includes a **UI for monitor mapping**. Users can automatically detect valid Monitorian device IDs and select the correct one from a dropdown, solving the primary usability issue of previous versions.
--   **Dynamic Discovery:** The frontend probes a list of fallback ports to find and connect to the active backend server.
+-   **Graceful Degradation (Demo Mode):** If the frontend cannot connect to the backend on any of the specified ports, it automatically enters a "Demo Mode". It displays a clear banner and loads a static set of sample monitors, allowing the UI to be explored even without a live backend connection.
+-   **Real-Time Data:** When connected to a live backend, it establishes a persistent WebSocket connection. All data displayed on the monitor cards is pushed from the server in real-time.
+-   **Advanced Configuration:** The settings modal includes a **UI for monitor mapping**. Users can automatically detect valid Monitorian device IDs and select the correct one from a dropdown, solving a primary usability issue.
+-   **Dynamic Discovery:** The frontend probes a list of fallback ports to find and connect to the active backend server's API and WebSocket.
 
 ---
 
