@@ -101,10 +101,10 @@ const App: React.FC = () => {
     setSelectedMonitor(null);
   };
 
-  const handleSaveSettings = async (monitorId: string, settings: MonitorSettings) => {
+  const handleSaveSettings = async (monitorId: string, settings: MonitorSettings, monitorianName: string) => {
     // Optimistic update
-    setMonitors(monitors.map(m => m.id === monitorId ? { ...m, settings } : m));
-    await updateMonitorSettings(monitorId, settings);
+    setMonitors(monitors.map(m => m.id === monitorId ? { ...m, settings, monitorianName } : m));
+    await updateMonitorSettings(monitorId, settings, monitorianName);
     handleCloseSettings();
   };
   

@@ -1,24 +1,42 @@
-
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { Monitor, MonitorSettings } from '../types';
+import { getMonitorianDevices } from '../services/monitorService';
 import Slider from './Slider';
 import Toggle from './Toggle';
 
 interface SettingsModalProps {
   monitor: Monitor;
   onClose: () => void;
-  onSave: (monitorId: string, settings: MonitorSettings) => void;
+  onSave: (monitorId: string, settings: MonitorSettings, monitorianName: string) => void;
 }
 
 const SettingsModal: React.FC<SettingsModalProps> = ({ monitor, onClose, onSave }) => {
   const [settings, setSettings] = useState<MonitorSettings>(monitor.settings);
+  const [monitorianName, setMonitorianName] = useState<string>(monitor.monitorianName);
+  const [detectedDevices, setDetectedDevices] = useState<string[]>([]);
+  const [isDetecting, setIsDetecting] = useState(false);
+  const [detectionError, setDetectionError] = useState<string | null>(null);
+
+  const handleDetectDevices = async () => {
+      setIsDetecting(true);
+      setDetectionError(null);
+      try {
+          const devices = await getMonitorianDevices();
+          setDetectedDevices(devices);
+      } catch (error) {
+          console.error(error);
+          setDetectionError('Failed to detect devices. Is Monitorian.exe running correctly on the server?');
+      } finally {
+          setIsDetecting(false);
+      }
+  };
 
   const handleSettingChange = useCallback((key: keyof MonitorSettings, value: number | boolean) => {
     setSettings(prev => ({ ...prev, [key]: value }));
   }, []);
 
   const handleSave = () => {
-    onSave(monitor.id, settings);
+    onSave(monitor.id, settings, monitorianName);
   };
 
   const stopPropagation = (e: React.MouseEvent) => {
@@ -40,13 +58,39 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ monitor, onClose, onSave 
         </div>
         
         <div className="p-6 space-y-6 overflow-y-auto">
+          {/* Monitorian Device ID Selector */}
+          <div>
+            <label className="font-medium text-gray-200">Monitorian Device ID</label>
+            <p className="text-sm text-gray-400 mb-3">The ID used by Monitorian.exe to control this monitor. Use 'Detect' if unsure.</p>
+            <div className="flex gap-2">
+              <select
+                value={monitorianName}
+                onChange={(e) => setMonitorianName(e.target.value)}
+                className="w-full bg-gray-700 text-white rounded-md px-3 py-2 border border-gray-600 focus:outline-none focus:ring-2 focus:ring-primary"
+              >
+                <option value={monitorianName}>{monitorianName}</option>
+                {detectedDevices.filter(d => d !== monitorianName).map(device => (
+                  <option key={device} value={device}>{device}</option>
+                ))}
+              </select>
+              <button
+                onClick={handleDetectDevices}
+                disabled={isDetecting}
+                className="px-4 py-2 rounded-md bg-gray-600 hover:bg-gray-700 text-white font-semibold transition-colors disabled:opacity-50 disabled:cursor-wait"
+              >
+                {isDetecting ? 'Detecting...' : 'Detect'}
+              </button>
+            </div>
+            {detectionError && <p className="text-xs text-red-400 mt-2">{detectionError}</p>}
+          </div>
+
           <Slider
             label="Polling Interval (ms)"
             description="How often to check screen brightness. Lower is more responsive but uses more CPU."
             value={settings.pollInterval}
             min={50}
-            max={2000}
-            step={10}
+            max={5000}
+            step={50}
             onChange={(val) => handleSettingChange('pollInterval', val)}
           />
           <Slider

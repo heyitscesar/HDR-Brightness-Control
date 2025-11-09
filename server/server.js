@@ -20,13 +20,12 @@ app.use(express.json());
 
 // --- STATE MANAGEMENT ---
 let monitorsState = [];
-const activeIntervals = {};
+const activeIntervals = {}; // Now stores timeout IDs
 
 // --- PERSISTENCE ---
 
 function saveStateToFile() {
   try {
-    // Only save settings and isActive status, not transient data
     const stateToSave = monitorsState.map(({ settings, isActive, id, monitorianName }) => ({
       id,
       monitorianName,
@@ -144,32 +143,42 @@ async function runAdaptiveBrightness(monitor) {
       await adjustMonitorBrightness(monitor.monitorianName, targetBrightness);
       monitor.targetMonitorBrightness = targetBrightness;
       monitor.previousBrightness = targetBrightness;
-      // Clear previous error on success
       if (monitor.error) monitor.error = null;
     }
   } catch (error) {
-    monitor.error = `Loop Error: ${error.message}. Check Monitorian name in config.json.`;
-    // Stop the service for this monitor on error to prevent spamming logs
-    toggleService(monitor, false);
+    monitor.error = `Loop Error: ${error.message}. Check Monitorian name in settings.`;
+    toggleService(monitor, false); // Stop on error
   } finally {
-    // Broadcast state regardless of success or failure so UI updates
     broadcast({ type: 'monitor-update', payload: monitor });
   }
 }
 
+// ** REFACTORED to use recursive setTimeout for safer polling **
 function toggleService(monitor, start) {
-    if (start && !activeIntervals[monitor.id]) {
+    // Clear any existing timeout for this monitor before starting/stopping
+    if (activeIntervals[monitor.id]) {
+        clearTimeout(activeIntervals[monitor.id]);
+        delete activeIntervals[monitor.id];
+    }
+
+    if (start) {
         console.log(`Starting service for monitor: ${monitor.name} (using Monitorian name: '${monitor.monitorianName}')`);
         monitor.isActive = true;
         monitor.error = null;
         monitor.previousBrightness = null;
-        runAdaptiveBrightness(monitor);
-        activeIntervals[monitor.id] = setInterval(() => runAdaptiveBrightness(monitor), monitor.settings.pollInterval);
-    } else if (!start && activeIntervals[monitor.id]) {
+
+        const loop = async () => {
+            await runAdaptiveBrightness(monitor);
+            // If still active after the run, schedule the next one
+            if (monitor.isActive) {
+                activeIntervals[monitor.id] = setTimeout(loop, monitor.settings.pollInterval);
+            }
+        };
+        loop(); // Start the first iteration immediately
+    } else {
         console.log(`Stopping service for monitor: ${monitor.name}`);
         monitor.isActive = false;
-        clearInterval(activeIntervals[monitor.id]);
-        delete activeIntervals[monitor.id];
+        // The loop will naturally stop because monitor.isActive is false
     }
     broadcast({ type: 'monitor-update', payload: monitor });
 }
@@ -178,6 +187,25 @@ function toggleService(monitor, start) {
 // --- API ENDPOINTS ---
 app.get('/api/health', (req, res) => res.status(200).json({ status: 'ok' }));
 app.get('/api/monitors', (req, res) => res.json(monitorsState));
+
+// ** NEW ENDPOINT for UI-based monitor mapping **
+app.get('/api/monitorian-devices', (req, res) => {
+  exec('Monitorian.exe /get', (error, stdout, stderr) => {
+    if (error) {
+      console.error('Failed to execute Monitorian.exe /get:', stderr);
+      return res.status(500).json({ message: 'Could not execute Monitorian.exe. Is it in your PATH?' });
+    }
+    // Parse the output to get device names. Example line: "1: Generic PnP Monitor"
+    const devices = stdout.split('\n')
+      .map(line => line.trim())
+      .filter(line => line.match(/^\d+:/))
+      .map(line => {
+        const parts = line.split(':');
+        return parts[0]; // Just return the index "1", "2", etc.
+      });
+    res.json(devices);
+  });
+});
 
 app.post('/api/monitors/:id/toggle', (req, res) => {
   const { id } = req.params;
@@ -203,14 +231,17 @@ app.post('/api/monitors/:id/settings', (req, res) => {
 
     if (wasActive) toggleService(monitor, false);
 
-    monitorsState[monitorIndex].settings = { ...monitor.settings, ...newSettings };
+    // Update both settings and monitorianName
+    monitorsState[monitorIndex].settings = { ...monitor.settings, ...newSettings.settings };
+    monitorsState[monitorIndex].monitorianName = newSettings.monitorianName;
+
     console.log(`Updated settings for ${monitor.name}`);
 
     if (wasActive) toggleService(monitorsState[monitorIndex], true);
 
     saveStateToFile();
     broadcast({ type: 'monitor-update', payload: monitorsState[monitorIndex] });
-    res.status(200).json({ success: true, settings: monitorsState[monitorIndex].settings });
+    res.status(200).json({ success: true });
 });
 
 
@@ -233,9 +264,6 @@ async function initializeMonitors() {
 
     monitorsState = displays.map(d => {
       const saved = savedStates.find(s => s.id === d.id.toString());
-      
-      // ** FIX: Intelligently determine the default Monitorian name **
-      // Extracts the trailing number from names like '\\.\DISPLAY1' to get '1'
       const match = d.name.match(/(\d+)$/);
       const defaultMonitorianName = match ? match[1] : d.name;
 
@@ -256,10 +284,8 @@ async function initializeMonitors() {
     console.log('Initialized monitors:', monitorsState.map(m => ({ id: m.id, name: m.name, monitorianName: m.monitorianName })));
     saveStateToFile(); // Save the reconciled state
 
-    // Automatically start services for monitors that were active
     monitorsState.forEach(m => {
         if (m.isActive) {
-            // Re-set to false so toggleService starts it properly
             m.isActive = false; 
             toggleService(m, true);
         }
@@ -278,7 +304,6 @@ function startServer(ports) {
     }
     const port = ports[0];
     
-    // Clear previous listeners to avoid duplicates from recursive calls
     server.removeAllListeners();
     server.listen(port);
 

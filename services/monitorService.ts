@@ -3,11 +3,6 @@ import { Monitor, MonitorSettings } from '../types';
 const PORTS_TO_TRY = [3001, 3002, 3003, 3004, 3005, 3006];
 let activeApiUrl: string | null = null;
 
-/**
- * Finds the active backend server by checking a list of fallback ports.
- * Memoizes the result to avoid redundant checks.
- * @returns The base URL of the active API server.
- */
 const getActiveApiUrl = async (): Promise<string> => {
     if (activeApiUrl) {
         return activeApiUrl;
@@ -23,7 +18,6 @@ const getActiveApiUrl = async (): Promise<string> => {
                 return activeApiUrl;
             }
         } catch (error) {
-            // Port is not open, continue to the next one
             console.log(`Port ${port} is not available, trying next...`);
         }
     }
@@ -31,12 +25,6 @@ const getActiveApiUrl = async (): Promise<string> => {
     throw new Error('Could not connect to the backend server on any of the specified ports.');
 };
 
-
-// --- Live API Calls ---
-
-/**
- * Fetches the list of all monitors from the backend server.
- */
 export const getMonitors = async (): Promise<Monitor[]> => {
   const apiUrl = await getActiveApiUrl();
   console.log('Fetching monitors from backend...');
@@ -50,28 +38,37 @@ export const getMonitors = async (): Promise<Monitor[]> => {
 };
 
 /**
- * Sends updated settings for a specific monitor to the backend.
+ * Fetches the list of valid device names from Monitorian.exe.
+ */
+export const getMonitorianDevices = async (): Promise<string[]> => {
+    const apiUrl = await getActiveApiUrl();
+    console.log('Fetching Monitorian devices...');
+    const response = await fetch(`${apiUrl}/monitorian-devices`);
+    if (!response.ok) {
+        throw new Error('Failed to fetch Monitorian devices');
+    }
+    return await response.json();
+};
+
+/**
+ * Sends updated settings and monitorianName for a specific monitor to the backend.
  * @param monitorId - The ID of the monitor to update.
  * @param settings - The new settings object.
+ * @param monitorianName - The new name/ID for Monitorian.
  */
-export const updateMonitorSettings = async (monitorId: string, settings: MonitorSettings): Promise<boolean> => {
+export const updateMonitorSettings = async (monitorId: string, settings: MonitorSettings, monitorianName: string): Promise<boolean> => {
     const apiUrl = await getActiveApiUrl();
-    console.log(`Updating settings for monitor ${monitorId} via API`, settings);
+    console.log(`Updating settings for monitor ${monitorId} via API`, { settings, monitorianName });
     const response = await fetch(`${apiUrl}/monitors/${monitorId}/settings`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
         },
-        body: JSON.stringify(settings),
+        body: JSON.stringify({ settings, monitorianName }),
     });
     return response.ok;
 };
 
-/**
- * Tells the backend to start or stop the auto-brightness service for a monitor.
- * @param monitorId - The ID of the monitor to toggle.
- * @param isActive - The desired state (true for on, false for off).
- */
 export const toggleAutoBrightness = async (monitorId: string, isActive: boolean): Promise<boolean> => {
     const apiUrl = await getActiveApiUrl();
     console.log(`Toggling auto-brightness for monitor ${monitorId} to ${isActive} via API`);
