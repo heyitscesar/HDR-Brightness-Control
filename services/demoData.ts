@@ -19,7 +19,8 @@ export const getDemoData = (): Monitor[] => {
     {
       id: 'demo-display-1',
       name: 'Demo Monitor 1 (LG UltraFine)',
-      monitorianName: '1',
+      // FIX: Replaced `monitorianName` with `deviceId` to match the Monitor type.
+      deviceId: '1',
       isActive: true,
       currentScreenBrightness: 68,
       targetMonitorBrightness: 75,
@@ -29,7 +30,8 @@ export const getDemoData = (): Monitor[] => {
     {
       id: 'demo-display-2',
       name: 'Demo Monitor 2 (Dell)',
-      monitorianName: '2',
+      // FIX: Replaced `monitorianName` with `deviceId` to match the Monitor type.
+      deviceId: '2',
       isActive: false,
       currentScreenBrightness: 45,
       targetMonitorBrightness: 0,
@@ -39,7 +41,8 @@ export const getDemoData = (): Monitor[] => {
      {
       id: 'demo-display-3',
       name: 'Demo Monitor 3 (Error State)',
-      monitorianName: '3',
+      // FIX: Replaced `monitorianName` with `deviceId` to match the Monitor type.
+      deviceId: '3',
       isActive: false,
       currentScreenBrightness: 0,
       targetMonitorBrightness: 0,

@@ -2,11 +2,11 @@ const express = require('express');
 const cors = require('cors');
 const screenshot = require('screenshot-desktop');
 const sharp = require('sharp');
-const { exec } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const http = require('http');
 const { WebSocketServer } = require('ws');
+const ddciControl = require('./ddciControl');
 
 const app = express();
 const server = http.createServer(app);
@@ -20,20 +20,21 @@ app.use(express.json());
 
 // --- STATE MANAGEMENT ---
 let monitorsState = [];
-const activeIntervals = {}; // Now stores timeout IDs
+const activeIntervals = {}; // Stores timeout IDs
 
 // --- PERSISTENCE ---
 
 function saveStateToFile() {
   try {
-    const stateToSave = monitorsState.map(({ settings, isActive, id, monitorianName }) => ({
+    const stateToSave = monitorsState.map(({ settings, isActive, id, deviceId }) => ({
       id,
-      monitorianName,
+      deviceId,
       isActive,
       settings,
     }));
     fs.writeFileSync(CONFIG_PATH, JSON.stringify(stateToSave, null, 2), 'utf-8');
-  } catch (error) {
+  } catch (error)
+{
     console.error('Error saving state to config.json:', error);
   }
 }
@@ -98,25 +99,10 @@ async function calculatePerceivedBrightness(buffer, settings) {
   return (scaled / 255) * 100;
 }
 
-function adjustMonitorBrightness(monitorName, brightness) {
-  return new Promise((resolve, reject) => {
-    const command = `Monitorian.exe /set "${monitorName}" ${Math.round(brightness)} B`;
-    exec(command, (error) => {
-      if (error) {
-        console.error(`[${monitorName}] Error adjusting brightness: ${error.message}`);
-        reject(error);
-      } else {
-        console.log(`[${monitorName}] Brightness adjusted to ${brightness.toFixed(0)}%`);
-        resolve();
-      }
-    });
-  });
-}
-
 const DEBUG_IMAGE_PATH = 'debug/';
-async function saveDebugImage(buffer, brightness, monitorId) {
+async function saveDebugImage(buffer, monitorId) {
     if (!fs.existsSync(DEBUG_IMAGE_PATH)) fs.mkdirSync(DEBUG_IMAGE_PATH);
-    const filename = `debug-${monitorId}-${Date.now()}.jpg`;
+    const filename = `debug-${monitorId.replace(/\\/g, '_')}-${Date.now()}.jpg`;
     await sharp(buffer).toFile(path.join(DEBUG_IMAGE_PATH, filename));
 }
 
@@ -128,7 +114,7 @@ async function runAdaptiveBrightness(monitor) {
     monitor.currentScreenBrightness = calculatedBrightness;
 
     if (monitor.settings.debug) {
-      await saveDebugImage(imageBuffer, calculatedBrightness, monitor.id);
+      await saveDebugImage(imageBuffer, monitor.id);
     }
 
     const targetBrightness = Math.max(
@@ -140,45 +126,41 @@ async function runAdaptiveBrightness(monitor) {
       monitor.previousBrightness === null ||
       Math.abs(targetBrightness - monitor.previousBrightness) >= monitor.settings.brightnessThreshold
     ) {
-      await adjustMonitorBrightness(monitor.monitorianName, targetBrightness);
+      await ddciControl.setBrightness(monitor.deviceId, targetBrightness);
       monitor.targetMonitorBrightness = targetBrightness;
       monitor.previousBrightness = targetBrightness;
       if (monitor.error) monitor.error = null;
     }
   } catch (error) {
-    monitor.error = `Loop Error: ${error.message}. Check Monitorian name in settings.`;
+    monitor.error = `DDC/CI Error: ${error.message}. Check device ID in settings.`;
     toggleService(monitor, false); // Stop on error
   } finally {
     broadcast({ type: 'monitor-update', payload: monitor });
   }
 }
 
-// ** REFACTORED to use recursive setTimeout for safer polling **
 function toggleService(monitor, start) {
-    // Clear any existing timeout for this monitor before starting/stopping
     if (activeIntervals[monitor.id]) {
         clearTimeout(activeIntervals[monitor.id]);
         delete activeIntervals[monitor.id];
     }
 
     if (start) {
-        console.log(`Starting service for monitor: ${monitor.name} (using Monitorian name: '${monitor.monitorianName}')`);
+        console.log(`Starting service for monitor: ${monitor.name} (using device ID: '${monitor.deviceId}')`);
         monitor.isActive = true;
         monitor.error = null;
         monitor.previousBrightness = null;
 
         const loop = async () => {
             await runAdaptiveBrightness(monitor);
-            // If still active after the run, schedule the next one
             if (monitor.isActive) {
                 activeIntervals[monitor.id] = setTimeout(loop, monitor.settings.pollInterval);
             }
         };
-        loop(); // Start the first iteration immediately
+        loop();
     } else {
         console.log(`Stopping service for monitor: ${monitor.name}`);
         monitor.isActive = false;
-        // The loop will naturally stop because monitor.isActive is false
     }
     broadcast({ type: 'monitor-update', payload: monitor });
 }
@@ -188,23 +170,15 @@ function toggleService(monitor, start) {
 app.get('/api/health', (req, res) => res.status(200).json({ status: 'ok' }));
 app.get('/api/monitors', (req, res) => res.json(monitorsState));
 
-// ** NEW ENDPOINT for UI-based monitor mapping **
-app.get('/api/monitorian-devices', (req, res) => {
-  exec('Monitorian.exe /get', (error, stdout, stderr) => {
-    if (error) {
-      console.error('Failed to execute Monitorian.exe /get:', stderr);
-      return res.status(500).json({ message: 'Could not execute Monitorian.exe. Is it in your PATH?' });
-    }
-    // Parse the output to get device names. Example line: "1: Generic PnP Monitor"
-    const devices = stdout.split('\n')
-      .map(line => line.trim())
-      .filter(line => line.match(/^\d+:/))
-      .map(line => {
-        const parts = line.split(':');
-        return parts[0]; // Just return the index "1", "2", etc.
-      });
-    res.json(devices);
-  });
+// ** UPGRADED ENDPOINT for generic DDC/CI device mapping **
+app.get('/api/ddci-devices', async (req, res) => {
+  try {
+    const result = await ddciControl.getAvailableMonitors();
+    res.json(result);
+  } catch (error) {
+      console.error('Failed to get DDC/CI devices:', error);
+      res.status(500).json({ message: error.message, tool: ddciControl.getActiveTool() || 'none', devices: [] });
+  }
 });
 
 app.post('/api/monitors/:id/toggle', (req, res) => {
@@ -221,7 +195,7 @@ app.post('/api/monitors/:id/toggle', (req, res) => {
 
 app.post('/api/monitors/:id/settings', (req, res) => {
     const { id } = req.params;
-    const newSettings = req.body;
+    const { settings, deviceId } = req.body;
     const monitorIndex = monitorsState.findIndex(m => m.id === id);
 
     if (monitorIndex === -1) return res.status(404).json({ message: 'Monitor not found' });
@@ -231,9 +205,8 @@ app.post('/api/monitors/:id/settings', (req, res) => {
 
     if (wasActive) toggleService(monitor, false);
 
-    // Update both settings and monitorianName
-    monitorsState[monitorIndex].settings = { ...monitor.settings, ...newSettings.settings };
-    monitorsState[monitorIndex].monitorianName = newSettings.monitorianName;
+    monitorsState[monitorIndex].settings = { ...monitor.settings, ...settings };
+    monitorsState[monitorIndex].deviceId = deviceId;
 
     console.log(`Updated settings for ${monitor.name}`);
 
@@ -264,15 +237,18 @@ async function initializeMonitors() {
 
     monitorsState = displays.map(d => {
       const saved = savedStates.find(s => s.id === d.id.toString());
+      // Default deviceId guess (handles both Monitorian "1" and CMM "\\.\DISPLAY1")
       const match = d.name.match(/(\d+)$/);
-      const defaultMonitorianName = match ? match[1] : d.name;
+      const defaultDeviceId = ddciControl.getActiveTool() === 'monitorian' 
+        ? (match ? match[1] : d.name) 
+        : d.id.toString();
 
       return {
         id: d.id.toString(),
         name: d.name,
-        monitorianName: saved?.monitorianName || defaultMonitorianName,
+        deviceId: saved?.deviceId || defaultDeviceId,
         isActive: saved?.isActive || false,
-        settings: saved?.settings || JSON.parse(JSON.stringify(defaultSettings)),
+        settings: saved?.settings || { ...defaultSettings },
         // Transient state
         currentScreenBrightness: 0,
         targetMonitorBrightness: 0,
@@ -281,8 +257,8 @@ async function initializeMonitors() {
       };
     });
 
-    console.log('Initialized monitors:', monitorsState.map(m => ({ id: m.id, name: m.name, monitorianName: m.monitorianName })));
-    saveStateToFile(); // Save the reconciled state
+    console.log('Initialized monitors:', monitorsState.map(m => ({ id: m.id, name: m.name, deviceId: m.deviceId })));
+    saveStateToFile();
 
     monitorsState.forEach(m => {
         if (m.isActive) {
@@ -309,7 +285,6 @@ function startServer(ports) {
 
     server.on('listening', () => {
         console.log(`Server with WebSocket running on http://localhost:${port}`);
-        console.log('Ensure Monitorian.exe is in the same directory or in your system PATH.');
     });
 
     server.on('error', (err) => {
@@ -325,6 +300,12 @@ function startServer(ports) {
 
 // --- Main Execution ---
 (async () => {
+    console.log("Initializing DDC/CI control module...");
+    await ddciControl.initialize();
+    if (!ddciControl.isInitialized() || !ddciControl.getActiveTool()) {
+        console.error("Could not initialize DDC/CI control. Exiting.");
+        process.exit(1);
+    }
     console.log("Initializing monitor configuration...");
     await initializeMonitors();
     console.log("Initialization complete. Starting server...");

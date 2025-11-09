@@ -17,17 +17,14 @@ const App: React.FC = () => {
   const [wsStatus, setWsStatus] = useState<WebSocketStatus>('disconnected');
   const ws = useRef<WebSocket | null>(null);
   
-  // Setup WebSocket connection with fallback ports
   const connectWebSocket = useCallback(() => {
     let portIndex = 0;
     const tryConnect = () => {
       if (portIndex >= WS_PORTS_TO_TRY.length) {
-        console.error("Could not connect to WebSocket on any of the specified ports.");
         setWsStatus('disconnected');
         return;
       }
       const port = WS_PORTS_TO_TRY[portIndex];
-      // If a connection is already open or connecting, don't try again.
       if (ws.current && (ws.current.readyState === WebSocket.OPEN || ws.current.readyState === WebSocket.CONNECTING)) {
         return;
       }
@@ -36,7 +33,6 @@ const App: React.FC = () => {
       setWsStatus('connecting');
 
       ws.current.onopen = () => {
-        console.log(`WebSocket connected on port ${port}`);
         setWsStatus('connected');
       };
 
@@ -52,7 +48,6 @@ const App: React.FC = () => {
 
       ws.current.onclose = () => {
         if (wsStatus !== 'disconnected') {
-            console.log('WebSocket disconnected.');
             setWsStatus('disconnected');
         }
       };
@@ -60,7 +55,7 @@ const App: React.FC = () => {
       ws.current.onerror = () => {
         ws.current?.close();
         portIndex++;
-        tryConnect(); // Try the next port
+        tryConnect();
       };
     };
     tryConnect();
@@ -77,13 +72,12 @@ const App: React.FC = () => {
         setWsStatus('disconnected');
       } else {
         setIsDemoMode(false);
-        connectWebSocket(); // Only attempt WS connection if not in demo mode
+        connectWebSocket();
       }
       
       setMonitors(data);
     } catch (err: any) {
       console.error(err);
-      // Fallback handled in service, but we can set demo mode here too
       setIsDemoMode(true);
     } finally {
       setLoading(false);
@@ -110,9 +104,9 @@ const App: React.FC = () => {
     setSelectedMonitor(null);
   };
 
-  const handleSaveSettings = async (monitorId: string, settings: MonitorSettings, monitorianName: string) => {
-    setMonitors(monitors.map(m => m.id === monitorId ? { ...m, settings, monitorianName } : m));
-    await updateMonitorSettings(monitorId, settings, monitorianName);
+  const handleSaveSettings = async (monitorId: string, settings: MonitorSettings, deviceId: string) => {
+    setMonitors(monitors.map(m => m.id === monitorId ? { ...m, settings, deviceId } : m));
+    await updateMonitorSettings(monitorId, settings, deviceId);
     handleCloseSettings();
   };
   

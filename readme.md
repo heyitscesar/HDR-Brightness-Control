@@ -1,38 +1,36 @@
 # Adaptive Monitor Brightness UI & Server
 
-A modern, full-stack application to control and fine-tune an adaptive brightness service for multiple monitors. It consists of a responsive React/TypeScript frontend and a powerful Node.js backend.
+A modern, full-stack application to control and fine-tune an adaptive brightness service for multiple monitors. It consists of a responsive React/TypeScript frontend and a powerful Node.js backend with a robust DDC/CI control system.
 
 ## Features
 
+-   **Robust DDC/CI Control:** The backend intelligently uses the best available tool to control monitor brightness. It prioritizes `Monitorian.exe` and automatically falls back to `ControlMyMonitor.exe` if needed.
 -   **Multi-Monitor Support:** View and manage all connected displays from a single dashboard.
--   **UI-Based Monitor Mapping:** A simple dropdown in the settings allows you to select the correct device ID for `Monitorian.exe`, eliminating the need for manual configuration file editing.
--   **Real-Time Status:** A WebSocket connection pushes live data from the server, showing the currently detected screen brightness and the applied monitor brightness without delay.
--   **Graceful Fallback (Demo Mode):** If the backend server is not running, the UI automatically loads with sample data, allowing you to explore its features.
--   **State Persistence:** All your settings are saved to a `server/config.json` file, so your configuration is preserved even after restarting the application.
+-   **UI-Based Device Mapping:** The settings UI lets you detect and select the correct device ID for whichever control tool is active, eliminating manual configuration.
+-   **Real-Time Status:** A WebSocket connection pushes live data from the server, showing detected screen brightness and applied monitor brightness without delay.
+-   **Graceful Fallback (Demo Mode):** If the backend server is not running, the UI loads with sample data, allowing you to explore its features.
+-   **State Persistence:** All your settings are saved to a `server/config.json` file, so your configuration is preserved across restarts.
 -   **Resilient Connectivity:** The application automatically handles port conflicts by trying a series of fallback ports (3001-3006).
--   **Robust Polling:** The backend uses a safe polling mechanism to prevent performance issues, even with very fast polling intervals.
 -   **Clear Error Feedback:** If the backend fails to control a monitor, a clear error message is displayed directly on the UI.
 
 ## How It Works
 
-This project is composed of two main parts: a Node.js backend and a React frontend.
+This project is composed of a Node.js backend and a React frontend.
 
 ### Backend (Node.js)
 
 The backend (`/server` directory) is the core of the operation.
-1.  On first run, it discovers monitors and creates a `config.json` file. On subsequent runs, it loads this configuration.
-2.  It runs an Express.js server for API calls (like updating settings) and a **WebSocket server** for pushing real-time data to the UI.
-3.  When "Auto-Brightness" is enabled, it starts a dedicated, robust polling loop.
-4.  In the loop, it captures the screen, uses `sharp` to calculate brightness, and executes `Monitorian.exe` to set the physical monitor's brightness.
-5.  All state changes are immediately broadcast to the frontend via WebSockets.
+1.  **DDC/CI Abstraction:** On startup, a dedicated module checks for `Monitorian.exe` in the system PATH. If not found, it checks for `ControlMyMonitor.exe` in the `/server` directory. All brightness control commands are routed through this module.
+2.  **State Management:** It discovers monitors and creates/loads a `config.json` file to persist settings.
+3.  **Real-Time Communication:** It runs an Express.js server for API calls and a WebSocket server for pushing live data to the UI.
+4.  **Brightness Loop:** When active, a safe polling loop captures the screen, calculates apparent brightness, and calls the DDC/CI module to set the physical monitor's brightness.
 
 ### Frontend (React)
 
 The frontend (`/src` directory) provides the user interface.
-1.  It dynamically probes a list of ports to find and connect to the active backend server.
-2.  If a backend is found, it establishes a persistent WebSocket connection to listen for live updates.
-3.  **If no backend is found, it enters a read-only "Demo Mode"** with sample data to showcase the UI.
-4.  The settings modal allows for easy configuration of all parameters, including the crucial Monitorian device ID.
+1.  It dynamically probes ports to find and connect to the active backend server.
+2.  If no backend is found, it enters a read-only **"Demo Mode"** with sample data.
+3.  The settings modal allows easy configuration, including a "Detect" button that gets a list of valid device IDs from the backend's active DDC/CI tool.
 
 ## Technology Stack
 
@@ -40,14 +38,17 @@ The frontend (`/src` directory) provides the user interface.
 -   **Frontend:** [React](https://reactjs.org/)
 -   **Language:** [TypeScript](https://www.typescriptlang.org/)
 -   **Styling:** [Tailwind CSS](https://tailwindcss.com/)
+-   **DDC/CI Tools:** `Monitorian.exe` (Primary), `ControlMyMonitor.exe` (Fallback)
 
 ## Getting Started
 
 ### Prerequisites
 
 -   [Node.js](https://nodejs.org/en/) (v16+) installed.
--   **Windows Operating System** (required by `screenshot-desktop` and `Monitorian`).
--   **`Monitorian.exe`:** Download the latest release from [Monitorian's GitHub page](https://github.com/emoacht/Monitorian/releases) and place `Monitorian.exe` in the `server/` directory, or in a location included in your system's PATH.
+-   **Windows Operating System**.
+-   **DDC/CI Control Utilities:** You need at least one of the following:
+    -   **Primary:** Download `Monitorian.exe` from its [GitHub page](https://github.com/emoacht/Monitorian/releases) and ensure it is in your system's PATH.
+    -   **Fallback:** Download `ControlMyMonitor.exe` from [Nirsoft](https://www.nirsoft.net/utils/control_my_monitor.html) and place the `.exe` file inside the `/server` directory.
 
 ### Installation & Running
 
@@ -64,30 +65,23 @@ npm install
 
 # Start the server
 npm start
-# Or for auto-reloading during development:
-npm run dev
 ```
-The server will start on `http://localhost:3001` or the next available port if 3001 is in use.
+The server will start on `http://localhost:3001` or the next available port. Check the console logs to see which DDC/CI tool it detected.
 
 **2. Frontend UI Setup**
 
-The project is already configured. Simply open a new terminal in the project's root directory. The frontend will automatically find and connect to the running backend server.
-
-*Note: The frontend will be served by the development environment you are using.*
+The project is already configured. The frontend will automatically find and connect to the running backend server.
 
 ### Troubleshooting
 
 **"Demo Mode" Banner is Showing**
-
-If you see a yellow banner indicating "Demo Mode," it means the frontend UI could not connect to the backend server.
+This means the frontend could not connect to the backend.
 -   Ensure the backend server is running in a separate terminal.
--   Check the server's terminal for any startup errors.
--   Make sure you don't have a firewall blocking connections on ports `3001-3006`.
+-   Check the server's terminal for any startup errors (e.g., "Neither Monitorian.exe nor ControlMyMonitor.exe could be found").
 
 **Brightness Isn't Changing**
-
-If the service is active but brightness doesn't change:
 1.  Click the **Settings icon** on the monitor's card.
-2.  Click the **"Detect"** button to find all monitors that `Monitorian.exe` can see.
-3.  Select the correct ID from the **"Monitorian Device ID"** dropdown.
+2.  Click the **"Detect"** button. This will use the backend's active tool to find all controllable monitors.
+3.  Select the correct ID from the **"DDC/CI Device ID"** dropdown.
 4.  Click **"Save Changes"**.
+5.  Check the `server/cmd.readme.cmd` file for more details on the command-line tools.

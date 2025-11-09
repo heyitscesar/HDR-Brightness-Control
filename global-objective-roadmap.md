@@ -14,16 +14,17 @@ The project will be developed across three distinct phases, prioritizing stabili
 
 **Goal:** Address the most critical points of failure and improve the core user experience to make the application reliable for everyday use without manual file editing.
 
--   **[COMPLETED] UI-Based Monitor Mapping:** The settings modal now includes a feature to detect and select the correct `Monitorian.exe` identifier from a dropdown list, eliminating the need for manual JSON editing.
--   **[COMPLETED] Safer Polling Loop:** The backend's `setInterval` logic has been replaced with a recursive `setTimeout` pattern, ensuring stability and preventing resource contention under heavy load.
--   **[COMPLETED] Graceful Degradation (Demo Mode):** The frontend now automatically falls back to a read-only "Demo Mode" with sample data if the backend server is unreachable, ensuring a good user experience even when the connection is down.
+-   **[COMPLETED] Abstracted DDC/CI Control:** The backend now features a unified control module that intelligently uses the best available command-line utility. It prioritizes `Monitorian.exe` and automatically falls back to `ControlMyMonitor.exe`.
+-   **[COMPLETED] UI-Based Device Mapping:** The settings modal now detects and displays valid device identifiers for whichever DDC/CI tool is active on the backend, eliminating the need for manual configuration.
+-   **[COMPLETED] Safer Polling Loop:** The backend's `setInterval` logic has been replaced with a recursive `setTimeout` pattern, ensuring stability and preventing resource contention.
+-   **[COMPLETED] Graceful Degradation (Demo Mode):** The frontend automatically falls back to a read-only "Demo Mode" if the backend server is unreachable.
 
 ### Phase 2: Productization (Next Steps)
 
 **Goal:** Package the application for easy distribution and installation, removing the need for a technical setup process.
 
 1.  **Package with Electron:**
-    *   **Problem:** The application requires users to install Node.js and run two separate terminal commands, which is a major barrier for the average user.
+    *   **Problem:** The application requires users to install Node.js and run two separate terminal commands.
     *   **Solution:**
         *   Integrate [Electron](https://www.electronjs.org/) to bundle the Node.js backend and the React frontend into a single, installable `.exe` file for Windows.
         *   The Electron main process will manage the lifecycle of the backend server and display the web UI in a native window.
@@ -44,7 +45,4 @@ The project will be developed across three distinct phases, prioritizing stabili
     *   **Concept:** Introduce a "Night Light" feature that automatically lowers the maximum brightness and applies a warmer tone after sunset.
 
 3.  **Explore Alternative Brightness Controls:**
-    *   **Concept:** Research and potentially integrate other methods of controlling monitor brightness (e.g., via WMI or other libraries) to reduce the hard dependency on `Monitorian.exe` and improve compatibility.
-
-4.  **Localization (i18n):**
-    *   **Concept:** Add support for multiple languages in the user interface.
+    *   **Concept:** Research and potentially integrate other methods of controlling monitor brightness (e.g., via WMI or other libraries) to further reduce hard dependencies and improve compatibility.

@@ -1,19 +1,20 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { Monitor, MonitorSettings } from '../types';
-import { getMonitorianDevices } from '../services/monitorService';
+import { getDDCIDevices } from '../services/monitorService';
 import Slider from './Slider';
 import Toggle from './Toggle';
 
 interface SettingsModalProps {
   monitor: Monitor;
   onClose: () => void;
-  onSave: (monitorId: string, settings: MonitorSettings, monitorianName: string) => void;
+  onSave: (monitorId: string, settings: MonitorSettings, deviceId: string) => void;
 }
 
 const SettingsModal: React.FC<SettingsModalProps> = ({ monitor, onClose, onSave }) => {
   const [settings, setSettings] = useState<MonitorSettings>(monitor.settings);
-  const [monitorianName, setMonitorianName] = useState<string>(monitor.monitorianName);
+  const [deviceId, setDeviceId] = useState<string>(monitor.deviceId);
   const [detectedDevices, setDetectedDevices] = useState<string[]>([]);
+  const [activeTool, setActiveTool] = useState<string | null>(null);
   const [isDetecting, setIsDetecting] = useState(false);
   const [detectionError, setDetectionError] = useState<string | null>(null);
 
@@ -21,11 +22,13 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ monitor, onClose, onSave 
       setIsDetecting(true);
       setDetectionError(null);
       try {
-          const devices = await getMonitorianDevices();
+          const { tool, devices } = await getDDCIDevices();
+          if (tool === 'error') throw new Error('Backend failed to fetch devices.');
           setDetectedDevices(devices);
+          setActiveTool(tool);
       } catch (error) {
           console.error(error);
-          setDetectionError('Failed to detect devices. Is Monitorian.exe running correctly on the server?');
+          setDetectionError('Failed to detect devices. Is the DDC/CI utility running correctly on the server?');
       } finally {
           setIsDetecting(false);
       }
@@ -36,7 +39,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ monitor, onClose, onSave 
   }, []);
 
   const handleSave = () => {
-    onSave(monitor.id, settings, monitorianName);
+    onSave(monitor.id, settings, deviceId);
   };
 
   const stopPropagation = (e: React.MouseEvent) => {
@@ -58,18 +61,17 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ monitor, onClose, onSave 
         </div>
         
         <div className="p-6 space-y-6 overflow-y-auto">
-          {/* Monitorian Device ID Selector */}
           <div>
-            <label className="font-medium text-gray-200">Monitorian Device ID</label>
-            <p className="text-sm text-gray-400 mb-3">The ID used by Monitorian.exe to control this monitor. Use 'Detect' if unsure.</p>
+            <label className="font-medium text-gray-200">DDC/CI Device ID</label>
+            <p className="text-sm text-gray-400 mb-3">The ID used by the backend DDC/CI tool to control this monitor. Use 'Detect' if unsure.</p>
             <div className="flex gap-2">
               <select
-                value={monitorianName}
-                onChange={(e) => setMonitorianName(e.target.value)}
+                value={deviceId}
+                onChange={(e) => setDeviceId(e.target.value)}
                 className="w-full bg-gray-700 text-white rounded-md px-3 py-2 border border-gray-600 focus:outline-none focus:ring-2 focus:ring-primary"
               >
-                <option value={monitorianName}>{monitorianName}</option>
-                {detectedDevices.filter(d => d !== monitorianName).map(device => (
+                <option value={deviceId}>{deviceId}</option>
+                {detectedDevices.filter(d => d !== deviceId).map(device => (
                   <option key={device} value={device}>{device}</option>
                 ))}
               </select>
@@ -81,6 +83,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ monitor, onClose, onSave 
                 {isDetecting ? 'Detecting...' : 'Detect'}
               </button>
             </div>
+            {activeTool && <p className="text-xs text-green-400 mt-2">Detection using: <strong>{activeTool}</strong></p>}
             {detectionError && <p className="text-xs text-red-400 mt-2">{detectionError}</p>}
           </div>
 

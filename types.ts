@@ -9,9 +9,9 @@ export interface MonitorSettings {
 }
 
 export interface Monitor {
-  id: string;
+  id: string; // Internal ID from screenshot-desktop
   name: string;
-  monitorianName: string; // The name/ID used by Monitorian.exe
+  deviceId: string; // The ID used by the active DDC/CI tool (Monitorian, ControlMyMonitor, etc.)
   isActive: boolean;
   currentScreenBrightness: number;
   targetMonitorBrightness: number;
