@@ -10,18 +10,21 @@ const serverPath = path.join(__dirname, 'server', 'server.js');
 const iconPath = path.join(__dirname, 'assets', 'icon.png'); // Path for the tray icon
 
 function createWindow() {
+  const preloadPath = path.join(__dirname, 'preload.js');
+  console.log(`[Main Process] Using preload script at: ${preloadPath}`);
+
   mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
-      preload: path.join(__dirname, 'preload.js')
+      preload: preloadPath
     },
     icon: iconPath // Set window icon
   });
 
-  mainWindow.loadFile('index.html');
+  mainWindow.loadFile(path.join(__dirname, 'index.html'));
 
   // Instead of quitting, hide the window to the tray
   mainWindow.on('close', (event) => {

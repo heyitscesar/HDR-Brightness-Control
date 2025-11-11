@@ -3,18 +3,17 @@ import { Monitor } from '../../types';
 import Toggle from '../ui/Toggle';
 import { SettingsIcon } from '../icons/SettingsIcon';
 import { MonitorIcon } from '../icons/MonitorIcon';
-import { useI18n } from '../../hooks/useI18n';
 
 interface MonitorCardProps {
   monitor: Monitor;
+  isUpdating: boolean;
   onToggleActive: (monitorId: string, isActive: boolean) => void;
   onOpenSettings: (monitor: Monitor) => void;
 }
 
-const MonitorCard: React.FC<MonitorCardProps> = ({ monitor, onToggleActive, onOpenSettings }) => {
+const MonitorCard: React.FC<MonitorCardProps> = ({ monitor, isUpdating, onToggleActive, onOpenSettings }) => {
   const { id, name, isActive, currentScreenBrightness, targetMonitorBrightness, error } = monitor;
   const cardGlowClass = isActive ? 'shadow-lg shadow-primary/20 ring-2 ring-primary' : 'ring-1 ring-gray-700';
-  const { t } = useI18n();
 
   const BrightnessBar: React.FC<{ value: number, label: string }> = ({ value, label }) => (
     <div className="w-full">
@@ -38,8 +37,9 @@ const MonitorCard: React.FC<MonitorCardProps> = ({ monitor, onToggleActive, onOp
           </div>
           <button 
             onClick={() => onOpenSettings(monitor)} 
-            className="p-2 rounded-full hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-primary-focus transition-colors"
-            aria-label={t('monitorCard.settings.ariaLabel', { monitorName: name })}
+            className="p-2 rounded-full hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-primary-focus transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            aria-label={`Settings for ${name}`}
+            disabled={isUpdating}
           >
             <SettingsIcon className="w-5 h-5 text-gray-400"/>
           </button>
@@ -48,21 +48,22 @@ const MonitorCard: React.FC<MonitorCardProps> = ({ monitor, onToggleActive, onOp
         
         {error && (
             <div className="bg-red-900/50 border border-red-500/50 text-red-300 text-xs rounded-md p-3 mb-4">
-                <p className="font-bold mb-1">{t('monitorCard.error.title')}</p>
+                <p className="font-bold mb-1">An error occurred:</p>
                 <p>{error}</p>
             </div>
         )}
 
         <div className="space-y-4 mb-6">
-            <BrightnessBar value={currentScreenBrightness} label={t('monitorCard.brightness.screen')} />
-            <BrightnessBar value={targetMonitorBrightness} label={t('monitorCard.brightness.monitor')} />
+            <BrightnessBar value={currentScreenBrightness} label="Detected Screen Brightness" />
+            <BrightnessBar value={targetMonitorBrightness} label="Applied Monitor Brightness" />
         </div>
       </div>
 
       <div className="flex items-center justify-between mt-4 border-t border-gray-700 pt-4">
-        <span className="font-medium text-sm">{t('monitorCard.autoBrightness.label')}</span>
+        <span className="font-medium text-sm">Auto-Brightness</span>
         <Toggle 
-          enabled={isActive} 
+          enabled={isActive}
+          disabled={isUpdating}
           onChange={(enabled) => onToggleActive(id, enabled)}
         />
       </div>

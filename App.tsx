@@ -5,8 +5,8 @@ import { getDemoData } from './services/demoData';
 import Header from './components/core/Header';
 import MonitorCard from './components/core/MonitorCard';
 import SettingsModal from './components/core/SettingsModal';
+import ErrorBoundary from './components/core/ErrorBoundary';
 import { LoadingIcon } from './components/icons/LoadingIcon';
-import { useI18n } from './hooks/useI18n';
 
 type WebSocketStatus = 'connecting' | 'connected' | 'disconnected';
 const MAX_RECONNECT_DELAY = 30000; // 30 seconds
@@ -18,12 +18,12 @@ const App: React.FC = () => {
   const [selectedMonitor, setSelectedMonitor] = useState<Monitor | null>(null);
   const [wsStatus, setWsStatus] = useState<WebSocketStatus>('disconnected');
   const [serverPort, setServerPort] = useState<number | null>(null);
+  const [updatingMonitorId, setUpdatingMonitorId] = useState<string | null>(null);
   
   const ws = useRef<WebSocket | null>(null);
   const reconnectAttempts = useRef(0);
   const isUnmounted = useRef(false);
   const reconnectTimeoutId = useRef<number | null>(null);
-  const { t } = useI18n();
   
   const connectWebSocket = useCallback((port: number) => {
     if (!port || isUnmounted.current) return;
@@ -79,11 +79,18 @@ const App: React.FC = () => {
     }, 10000);
 
     // Listen for the signal from the main process that the server is ready
-    window.electronAPI.onServerReady(({ port }) => {
-        if (isUnmounted.current) return;
-        clearTimeout(handshakeTimeout);
-        setServerPort(port);
-    });
+    if (window.electronAPI) {
+      window.electronAPI.onServerReady(({ port }) => {
+          if (isUnmounted.current) return;
+          clearTimeout(handshakeTimeout);
+          setServerPort(port);
+      });
+    } else {
+      // If the API isn't there, we can't get the port.
+      // The timeout will handle falling back to demo mode.
+      console.warn("App: Electron API not found. Will fall back to demo mode on timeout.");
+    }
+
 
     return () => {
       isUnmounted.current = true;
@@ -135,8 +142,21 @@ const App: React.FC = () => {
   }, [wsStatus, serverPort, connectWebSocket]);
 
   const handleToggleActive = async (monitorId: string, isActive: boolean) => {
+    const originalMonitors = [...monitors];
+    // Optimistic UI update
     setMonitors(monitors.map(m => m.id === monitorId ? { ...m, isActive } : m));
-    await toggleAutoBrightness(monitorId, isActive);
+    setUpdatingMonitorId(monitorId);
+
+    try {
+      await toggleAutoBrightness(monitorId, isActive);
+    } catch (error) {
+      console.error(`Failed to toggle monitor ${monitorId}:`, error);
+      // Revert on failure
+      setMonitors(originalMonitors);
+      // Here you might want to show a toast notification
+    } finally {
+      setUpdatingMonitorId(null);
+    }
   };
 
   const handleOpenSettings = (monitor: Monitor) => {
@@ -148,8 +168,11 @@ const App: React.FC = () => {
   };
 
   const handleSaveSettings = async (monitorId: string, settings: MonitorSettings, deviceId: string) => {
-    setMonitors(monitors.map(m => m.id === monitorId ? { ...m, settings, deviceId } : m));
+    // This function will now propagate errors to the modal
     await updateMonitorSettings(monitorId, settings, deviceId);
+
+    // Update local state on success
+    setMonitors(monitors.map(m => m.id === monitorId ? { ...m, settings, deviceId } : m));
     handleCloseSettings();
   };
   
@@ -157,8 +180,8 @@ const App: React.FC = () => {
     <div className="container mx-auto px-4 md:px-6 pt-4">
         <div 
           className="bg-yellow-900/50 border border-yellow-500/50 text-yellow-200 text-sm rounded-lg p-4 text-center"
-          dangerouslySetInnerHTML={{ __html: t('demo.banner') }}
         >
+          <strong>Demo Mode:</strong> Could not connect to the backend server. You are viewing static demo data to showcase the user experience.
         </div>
     </div>
   );
@@ -168,7 +191,7 @@ const App: React.FC = () => {
       return (
         <div className="flex flex-col items-center justify-center h-64">
           <LoadingIcon className="w-12 h-12 text-primary"/>
-          <p className="mt-4 text-lg text-gray-400">{t('loading.monitors')}</p>
+          <p className="mt-4 text-lg text-gray-400">Loading monitors...</p>
         </div>
       );
     }
@@ -179,6 +202,7 @@ const App: React.FC = () => {
           <MonitorCard 
             key={monitor.id} 
             monitor={monitor} 
+            isUpdating={updatingMonitorId === monitor.id}
             onToggleActive={handleToggleActive}
             onOpenSettings={handleOpenSettings}
           />
@@ -192,7 +216,9 @@ const App: React.FC = () => {
       <Header wsStatus={wsStatus} onReconnectClick={handleManualReconnect} />
       {isDemoMode && <DemoModeBanner />}
       <main className="container mx-auto p-4 md:p-6">
-        {renderContent()}
+        <ErrorBoundary>
+          {renderContent()}
+        </ErrorBoundary>
       </main>
       {selectedMonitor && (
         <SettingsModal 

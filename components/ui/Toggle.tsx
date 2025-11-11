@@ -1,21 +1,22 @@
-
 import React from 'react';
 
 interface ToggleProps {
   enabled: boolean;
   onChange: (enabled: boolean) => void;
+  disabled?: boolean;
 }
 
-const Toggle: React.FC<ToggleProps> = ({ enabled, onChange }) => {
+const Toggle: React.FC<ToggleProps> = ({ enabled, onChange, disabled = false }) => {
   return (
     <button
       type="button"
       className={`${
         enabled ? 'bg-primary' : 'bg-gray-600'
-      } relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-primary-focus focus:ring-offset-2 focus:ring-offset-gray-800`}
+      } relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-primary-focus focus:ring-offset-2 focus:ring-offset-gray-800 disabled:opacity-50 disabled:cursor-not-allowed`}
       role="switch"
       aria-checked={enabled}
       onClick={() => onChange(!enabled)}
+      disabled={disabled}
     >
       <span
         aria-hidden="true"

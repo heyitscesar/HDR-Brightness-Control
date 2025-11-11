@@ -32,7 +32,6 @@ The system is a full-stack application now packaged within an **Electron** wrapp
     -   **Resilient API:** The service layer that communicates with the backend includes a retry mechanism.
     -   **Automatic Reconnection:** The WebSocket client implements an exponential backoff strategy, automatically attempting to reconnect if the connection is dropped.
     -   **Graceful Degradation (Demo Mode):** If the frontend cannot connect to the backend, it enters a "Demo Mode" with a clear banner and static sample data.
--   **Internationalization (i18n) Ready:** All user-facing strings are managed in a central JSON file and accessed via a custom `useI18n` hook.
 
 ---
 

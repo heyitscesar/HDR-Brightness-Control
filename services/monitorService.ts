@@ -36,7 +36,8 @@ const apiFetch = async (endpoint: string, options?: RequestInit): Promise<Respon
     
     const response = await fetch(`${apiUrl}${endpoint}`, options);
     if (!response.ok) {
-        throw new Error(`Request to ${endpoint} failed with status ${response.status}`);
+        const errorBody = await response.text();
+        throw new Error(`Request to ${endpoint} failed with status ${response.status}: ${errorBody}`);
     }
     return response;
 };
@@ -57,30 +58,18 @@ export const getDDCIDevices = async (): Promise<{tool: string, devices: string[]
     }
 };
 
-export const updateMonitorSettings = async (monitorId: string, settings: MonitorSettings, deviceId: string): Promise<boolean> => {
-    try {
-        const response = await apiFetch(`/monitors/${monitorId}/settings`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ settings, deviceId }),
-        });
-        return response.ok;
-    } catch (error) {
-        console.error(`Failed to update settings for monitor ${monitorId}:`, error);
-        return false;
-    }
+export const updateMonitorSettings = async (monitorId: string, settings: MonitorSettings, deviceId: string): Promise<void> => {
+    await apiFetch(`/monitors/${monitorId}/settings`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ settings, deviceId }),
+    });
 };
 
-export const toggleAutoBrightness = async (monitorId: string, isActive: boolean): Promise<boolean> => {
-    try {
-        const response = await apiFetch(`/monitors/${monitorId}/toggle`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ isActive }),
-        });
-        return response.ok;
-    } catch (error) {
-        console.error(`Failed to toggle auto-brightness for monitor ${monitorId}:`, error);
-        return false;
-    }
+export const toggleAutoBrightness = async (monitorId: string, isActive: boolean): Promise<void> => {
+    await apiFetch(`/monitors/${monitorId}/toggle`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ isActive }),
+    });
 };

@@ -44,5 +44,8 @@ The project will be developed across three distinct phases, prioritizing stabili
 2.  **Time-Based Adjustments:**
     *   **Concept:** Introduce a "Night Light" feature that automatically lowers the maximum brightness and applies a warmer tone after sunset.
 
-3.  **Explore Alternative Brightness Controls:**
+3.  **Internationalization (i18n) Support:**
+    *   **Concept:** Implement i18n to allow the UI to be translated into multiple languages, making the application accessible to a global audience.
+
+4.  **Explore Alternative Brightness Controls:**
     *   **Concept:** Research and potentially integrate other methods of controlling monitor brightness (e.g., via WMI or other libraries) to further reduce hard dependencies and improve compatibility.

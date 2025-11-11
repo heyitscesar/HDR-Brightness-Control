@@ -18,6 +18,7 @@
   "settings.deviceId.detecting": "Detecting...",
   "settings.deviceId.detectedWith": "Detection using: <strong>{tool}</strong>",
   "settings.deviceId.error": "Failed to detect devices. Is the DDC/CI utility running correctly on the server?",
+  "settings.error.save": "Failed to save settings. Please try again.",
   "settings.pollInterval.label": "Polling Interval (ms)",
   "settings.pollInterval.description": "How often to check screen brightness. Lower is more responsive but uses more CPU.",
   "settings.brightnessThreshold.label": "Brightness Threshold (%)",
