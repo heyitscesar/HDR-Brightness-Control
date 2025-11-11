@@ -4,7 +4,7 @@ A modern, full-stack application to control and fine-tune an adaptive brightness
 
 ## Features
 
--   **Robust DDC/CI Control:** The backend intelligently uses the best available tool to control monitor brightness. It prioritizes `Monitorian.exe` and automatically falls back to `ControlMyMonitor.exe` if needed.
+-   **Robust DDC/CI Control:** The backend intelligently uses the best available tool to control monitor brightness. It prioritizes `ControlMyMonitor.exe` and automatically falls back to `Monitorian.exe` if needed.
 -   **Multi-Monitor Support:** View and manage all connected displays from a single dashboard.
 -   **UI-Based Device Mapping:** The settings UI lets you detect and select the correct device ID for whichever control tool is active, eliminating manual configuration.
 -   **Reliable Connection Handshake:** The application uses Electron's IPC to securely establish a connection between the frontend and backend, eliminating race conditions.
@@ -19,7 +19,7 @@ This project is composed of a Node.js backend and a React frontend, wrapped in a
 ### Backend (Node.js)
 
 The backend (`/server` directory) is the core of the operation. It is launched automatically as a background process by the main Electron application.
-1.  **DDC/CI Abstraction:** On startup, a dedicated module checks for `Monitorian.exe` in the system PATH. If not found, it checks for `ControlMyMonitor.exe` in the `/server` directory. All brightness control commands are routed through this module.
+1.  **DDC/CI Abstraction:** On startup, a dedicated module checks for `ControlMyMonitor.exe` in the `/server` directory. If not found, it checks for `Monitorian.exe` in the system PATH as a fallback. All brightness control commands are routed through this module.
 2.  **State Management:** It discovers monitors and creates/loads a `config.json` file to persist settings.
 3.  **Real-Time Communication:** It runs an Express.js server for API calls and a WebSocket server for pushing live data to the UI.
 4.  **Brightness Loop:** When active, a safe polling loop captures the screen, calculates apparent brightness, and calls the DDC/CI module to set the physical monitor's brightness.
@@ -54,8 +54,8 @@ The project is a unified Electron application.
 -   [Node.js](https://nodejs.org/en/) (v16+) installed.
 -   **Windows Operating System**.
 -   **DDC/CI Control Utilities:** You need at least one of the following:
-    -   **Primary:** Download `Monitorian.exe` from its [GitHub page](https://github.com/emoacht/Monitorian/releases) and ensure it is in your system's PATH.
-    -   **Fallback:** Download `ControlMyMonitor.exe` from [Nirsoft](https://www.nirsoft.net/utils/control_my_monitor.html) and place the `.exe` file inside the `/server` directory.
+    -   **Primary:** Download `ControlMyMonitor.exe` from [Nirsoft](https://www.nirsoft.net/utils/control_my_monitor.html) and place the `.exe` file inside the `/server` directory.
+    -   **Fallback:** Download `Monitorian.exe` from its [GitHub page](https://github.com/emoacht/Monitorian/releases) and ensure it is in your system's PATH.
 
 ### Installation
 

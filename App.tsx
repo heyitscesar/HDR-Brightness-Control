@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Monitor, MonitorSettings } from './types';
-import { getMonitors, updateMonitorSettings, toggleAutoBrightness } from './services/monitorService';
+import { getServerInfo, getMonitors, updateMonitorSettings, toggleAutoBrightness } from './services/monitorService';
 import { getDemoData } from './services/demoData';
 import Header from './components/core/Header';
 import MonitorCard from './components/core/MonitorCard';
@@ -65,36 +65,41 @@ const App: React.FC = () => {
     };
   }, []);
 
-  // Effect to handle the initial connection and handshake with the Electron main process
+  const initializeConnection = useCallback(async (isManualRetry = false) => {
+    if (isUnmounted.current) return;
+
+    setLoading(true);
+    setIsDemoMode(false);
+
+    try {
+      const serverInfo = await getServerInfo(isManualRetry);
+      setServerPort(serverInfo.wsPort);
+      
+      const data = await getMonitors();
+      if (isUnmounted.current) return;
+      
+      setMonitors(data);
+      connectWebSocket(serverInfo.wsPort);
+
+    } catch (err) {
+      if (isUnmounted.current) return;
+      console.warn("Failed to initialize connection:", err);
+      setIsDemoMode(true);
+      setMonitors(getDemoData());
+    } finally {
+      if (!isUnmounted.current) {
+        setLoading(false);
+      }
+    }
+  }, [connectWebSocket]);
+
+  // Effect to handle the initial connection
   useEffect(() => {
     isUnmounted.current = false;
-
-    // Set a timeout to enter demo mode if the server doesn't report back in time
-    const handshakeTimeout = setTimeout(() => {
-        if (isUnmounted.current || serverPort) return;
-        console.warn("Server handshake timeout. Entering Demo Mode.");
-        setLoading(false);
-        setIsDemoMode(true);
-        setMonitors(getDemoData());
-    }, 10000);
-
-    // Listen for the signal from the main process that the server is ready
-    if (window.electronAPI) {
-      window.electronAPI.onServerReady(({ port }) => {
-          if (isUnmounted.current) return;
-          clearTimeout(handshakeTimeout);
-          setServerPort(port);
-      });
-    } else {
-      // If the API isn't there, we can't get the port.
-      // The timeout will handle falling back to demo mode.
-      console.warn("App: Electron API not found. Will fall back to demo mode on timeout.");
-    }
-
+    initializeConnection();
 
     return () => {
       isUnmounted.current = true;
-      clearTimeout(handshakeTimeout);
       if (reconnectTimeoutId.current) {
         clearTimeout(reconnectTimeoutId.current);
       }
@@ -103,43 +108,25 @@ const App: React.FC = () => {
         ws.current.close();
       }
     };
-  }, []); // Empty dependency array ensures this runs only once on mount
-
-
-  // Effect to fetch data and connect WebSocket once we know the server port
-  useEffect(() => {
-    if (!serverPort) return;
-
-    const fetchAndConnect = async () => {
-        try {
-            setLoading(true);
-            const data = await getMonitors();
-            setMonitors(data);
-            setIsDemoMode(false); // Success, so ensure we are not in demo mode
-            connectWebSocket(serverPort);
-        } catch (err: any) {
-            console.error("Failed to fetch monitors. Entering demo mode.", err);
-            setIsDemoMode(true);
-            setMonitors(getDemoData());
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    fetchAndConnect();
-  }, [serverPort, connectWebSocket]);
+  }, [initializeConnection]);
   
   const handleManualReconnect = useCallback(() => {
-    if (wsStatus === 'disconnected' && serverPort) {
-      console.log("Manual reconnect triggered.");
-      // Clear any pending automatic reconnect timeout
-      if (reconnectTimeoutId.current) {
-        clearTimeout(reconnectTimeoutId.current);
+    if (wsStatus === 'disconnected') {
+      if (serverPort) {
+        // We have a port, just reconnect WebSocket
+        console.log("Manual reconnect triggered (WebSocket only).");
+        if (reconnectTimeoutId.current) {
+          clearTimeout(reconnectTimeoutId.current);
+        }
+        reconnectAttempts.current = 0;
+        connectWebSocket(serverPort);
+      } else {
+        // We don't have a port (likely in demo mode), restart the whole process.
+        console.log("Manual reconnect triggered (Full handshake).");
+        initializeConnection(true);
       }
-      reconnectAttempts.current = 0; // Reset the backoff delay
-      connectWebSocket(serverPort); // Attempt to connect immediately
     }
-  }, [wsStatus, serverPort, connectWebSocket]);
+  }, [wsStatus, serverPort, connectWebSocket, initializeConnection]);
 
   const handleToggleActive = async (monitorId: string, isActive: boolean) => {
     const originalMonitors = [...monitors];

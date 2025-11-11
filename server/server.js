@@ -145,6 +145,15 @@ async function runAdaptiveBrightness(monitor) {
 }
 
 function toggleService(monitor, start) {
+    if (start && !monitor.deviceId) {
+        console.log(`Cannot start service for monitor ${monitor.name}: No DDC/CI Device ID is configured.`);
+        monitor.isActive = false; // Ensure it's off
+        monitor.error = "Cannot start: A DDC/CI Device ID must be selected in settings.";
+        broadcast({ type: 'monitor-update', payload: monitor });
+        saveStateToFile(); // Persist the inactive state
+        return;
+    }
+
     if (activeIntervals[monitor.id]) {
         clearTimeout(activeIntervals[monitor.id]);
         delete activeIntervals[monitor.id];
@@ -228,6 +237,7 @@ app.post('/api/monitors/:id/settings', (req, res) => {
 
     monitorsState[monitorIndex].settings = sanitizedSettings;
     monitorsState[monitorIndex].deviceId = deviceId;
+    monitorsState[monitorIndex].error = null; // Clear any previous configuration errors
 
     console.log(`Updated settings for ${monitor.name}`);
 
@@ -258,39 +268,81 @@ async function initializeMonitors() {
 
     monitorsState = displays.map(d => {
       const saved = savedStates.find(s => s.id === d.id.toString());
-      const match = d.name.match(/(\d+)$/);
-      const defaultDeviceId = ddciControl.getActiveTool() === 'monitorian' 
-        ? (match ? match[1] : d.name) 
-        : d.id.toString();
+      const deviceId = saved?.deviceId || ''; // Default to empty string; user must configure it.
+      let error = null;
+
+      // If the monitor was saved as active but now has no device ID, it needs configuration.
+      if (saved?.isActive && !deviceId) {
+          error = "Monitor needs configuration. Please select a DDC/CI Device ID in the settings.";
+      }
 
       return {
         id: d.id.toString(),
         name: d.name,
-        deviceId: saved?.deviceId || defaultDeviceId,
-        isActive: saved?.isActive || false,
+        deviceId: deviceId,
+        // It cannot be active if there's no device ID.
+        isActive: saved?.isActive && !!deviceId ? true : false,
         settings: { ...defaultSettings, ...(saved?.settings || {}) },
         // Transient state
         currentScreenBrightness: 0,
         targetMonitorBrightness: 0,
         previousBrightness: null,
-        error: null,
+        error: error,
       };
     });
 
-    console.log('Initialized monitors:', monitorsState.map(m => ({ id: m.id, name: m.name, deviceId: m.deviceId })));
+    console.log('Initialized monitors:', monitorsState.map(m => ({ id: m.id, name: m.name, deviceId: m.deviceId, isActive: m.isActive })));
     saveStateToFile();
 
-    monitorsState.forEach(m => {
-        if (m.isActive) {
-            const monitorToStart = { ...m, isActive: false }; // Ensure it starts fresh
-            toggleService(monitorToStart, true);
-        }
-    });
-
+    // The services for active monitors will be started AFTER the initial test.
   } catch (error) {
     console.error('Failed to initialize monitors:', error);
     process.exit(1);
   }
+}
+
+/**
+ * Runs a quick brightness test on all monitors to confirm DDC/CI control.
+ */
+async function runInitialBrightnessTest() {
+  console.log('[TEST] Starting initial brightness test for all monitors...');
+  const testBrightnessLevels = [20, 40];
+  const restoreBrightness = 60; // A sensible default to leave the monitors at.
+  const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+  for (const monitor of monitorsState) {
+    if (!monitor.deviceId) {
+        console.log(`[TEST] SKIPPED for monitor ${monitor.name}: No Device ID configured.`);
+        continue;
+    }
+    console.log(`[TEST] Testing monitor: ${monitor.name} (Device ID: ${monitor.deviceId})`);
+    try {
+      for (const level of testBrightnessLevels) {
+        await ddciControl.setBrightness(monitor.deviceId, level);
+        await delay(500);
+      }
+      // Restore brightness to a neutral level after the test flicker
+      await ddciControl.setBrightness(monitor.deviceId, restoreBrightness);
+      console.log(`[TEST] Test for ${monitor.name} successful. Brightness restored to ${restoreBrightness}%.`);
+    } catch (error) {
+      console.error(`[TEST] FAILED for monitor ${monitor.name}. Error: ${error.message}`);
+      // Don't throw, just log the error and continue to the next monitor.
+    }
+  }
+  console.log('[TEST] Initial brightness test complete.');
+}
+
+function startActiveServices() {
+    monitorsState.forEach(m => {
+        if (m.isActive) {
+            // Re-check here to be safe.
+            if (m.deviceId) {
+                // Find the latest state object to start the service with.
+                const monitorToStart = monitorsState.find(s => s.id === m.id);
+                toggleService(monitorToStart, true);
+            }
+        }
+    });
 }
 
 function startProdServer(ports) {
@@ -328,11 +380,19 @@ function startProdServer(ports) {
         console.log("Initializing DDC/CI control module...");
         await ddciControl.initialize();
         if (!ddciControl.isInitialized() || !ddciControl.getActiveTool()) {
-            console.error("Could not initialize DDC/CI control. Please ensure Monitorian.exe or ControlMyMonitor.exe is available. Exiting.");
+            console.error("Could not initialize DDC/CI control. Please ensure ControlMyMonitor.exe or Monitorian.exe is available. Exiting.");
             process.exit(1);
         }
         console.log("Initializing monitor configuration...");
         await initializeMonitors();
+
+        // --- ADDED FOR TESTING PURPOSES ---
+        await runInitialBrightnessTest();
+        // ------------------------------------
+        
+        // Now that the test is done, start services for any monitors marked as active.
+        startActiveServices();
+
         console.log("Initialization complete. Starting server...");
         
         if (isDev) {

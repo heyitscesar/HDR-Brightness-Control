@@ -1,10 +1,11 @@
-const { app, BrowserWindow, Tray, Menu, nativeImage } = require('electron');
+const { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain } = require('electron');
 const path = require('path');
 const { fork } = require('child_process');
 
 let mainWindow;
 let serverProcess;
 let tray;
+let cachedServerPort = null;
 
 const serverPath = path.join(__dirname, 'server', 'server.js');
 const iconPath = path.join(__dirname, 'assets', 'icon.png'); // Path for the tray icon
@@ -28,11 +29,7 @@ function createWindow() {
   if (!app.isPackaged) {
     // In development, load from the Vite dev server URL
     mainWindow.loadURL('http://localhost:5173');
-    // In dev mode, send the hardcoded server port number directly after the window loads.
-    mainWindow.webContents.on('did-finish-load', () => {
-        console.log(`[Main Process] Dev mode detected. Notifying renderer of server port ${DEV_PORT}.`);
-        mainWindow.webContents.send('server-ready', { port: DEV_PORT });
-    });
+    cachedServerPort = DEV_PORT; // In dev, we know the port.
   } else {
     // In production, load the built HTML file
     mainWindow.loadFile(path.join(__dirname, 'dist', 'index.html'));
@@ -65,17 +62,22 @@ function startServer() {
 
     // Listen for the 'ready' message from the server child process
     serverProcess.on('message', (message) => {
-        if (message.status === 'ready' && mainWindow) {
-            console.log(`Server is ready on port ${message.port}. Notifying renderer.`);
-            // Send the port number to the renderer process (frontend)
-            mainWindow.webContents.send('server-ready', { port: message.port });
+        if (message.status === 'ready') {
+            console.log(`Server is ready on port ${message.port}. Caching port.`);
+            cachedServerPort = message.port;
         }
     });
 
     serverProcess.on('exit', (code) => {
         console.log(`Server process exited with code ${code}`);
+        cachedServerPort = null; // Clear port on exit
     });
 }
+
+// Set up IPC handler for the renderer to pull server info
+ipcMain.handle('get-server-info', () => {
+    return { port: cachedServerPort };
+});
 
 app.on('ready', () => {
     // Only fork the server process in the packaged (production) app

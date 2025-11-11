@@ -1,38 +1,54 @@
 import { Monitor, MonitorSettings } from '../types';
 
-let activeApiUrl: string | null = null;
-let serverReadyPromise: Promise<string>;
-
-// This check is important because in a non-electron environment (like tests or a future web version),
-// window.electronAPI might not exist.
-if (window.electronAPI) {
-    serverReadyPromise = new Promise((resolve, reject) => {
-        // Resolve the promise with the correct URL when the main process signals readiness
-        window.electronAPI.onServerReady(({ port }) => {
-            console.log(`API Service: Received server-ready event for port ${port}`);
-            const url = `http://localhost:${port}/api`;
-            activeApiUrl = url;
-            resolve(url);
-        });
-    });
-} else {
-    // Fallback for non-Electron environments or if the preload script fails
-    console.warn("Electron API not found. Service will not function correctly.");
-    serverReadyPromise = Promise.reject(new Error("Electron API not available"));
+interface ServerInfo {
+    apiUrl: string;
+    wsPort: number;
 }
 
+let serverInfoCache: ServerInfo | null = null;
 
-const getActiveApiUrl = (): Promise<string> => {
-    // This promise will now wait until the `onServerReady` event is fired.
-    return serverReadyPromise;
+export const getServerInfo = async (forceRefetch: boolean = false): Promise<ServerInfo> => {
+    if (serverInfoCache && !forceRefetch) {
+        return serverInfoCache;
+    }
+
+    if (window.electronAPI && typeof window.electronAPI.requestServerInfo === 'function') {
+        // Electron context: Pull port from main process via IPC.
+        // Try for ~10 seconds to get the port.
+        for (let i = 0; i < 20; i++) { // 20 attempts * 500ms = 10 seconds
+            const { port } = await window.electronAPI.requestServerInfo();
+            if (port) {
+                console.log(`API Service (Electron): Received server port ${port}`);
+                const info = {
+                    apiUrl: `http://localhost:${port}/api`,
+                    wsPort: port,
+                };
+                serverInfoCache = info;
+                return info;
+            }
+            await new Promise(res => setTimeout(res, 500));
+        }
+        throw new Error("Timed out waiting for server port from main process.");
+    } else {
+        // Non-Electron context: Fallback for web deployment or testing.
+        console.warn("Electron API not found. Assuming web deployment and using hardcoded localhost:3001.");
+        const hardcodedPort = 3001;
+        const info = {
+            apiUrl: `http://localhost:${hardcodedPort}/api`,
+            wsPort: hardcodedPort,
+        };
+        serverInfoCache = info;
+        return info;
+    }
 };
+
 
 /**
  * A resilient fetch wrapper that waits for the backend to be ready.
  */
 const apiFetch = async (endpoint: string, options?: RequestInit): Promise<Response> => {
-    // This will wait until the server-ready event has been received and the promise has resolved.
-    const apiUrl = await getActiveApiUrl();
+    // This will get the cached info or fetch it if it's the first time.
+    const { apiUrl } = await getServerInfo();
     
     const response = await fetch(`${apiUrl}${endpoint}`, options);
     if (!response.ok) {
@@ -41,7 +57,6 @@ const apiFetch = async (endpoint: string, options?: RequestInit): Promise<Respon
     }
     return response;
 };
-
 
 export const getMonitors = async (): Promise<Monitor[]> => {
     const response = await apiFetch('/monitors');

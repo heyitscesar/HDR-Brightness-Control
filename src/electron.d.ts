@@ -3,11 +3,10 @@
 
 export interface IElectronAPI {
   /**
-   * Registers a callback function to be invoked when the 'server-ready' IPC event
-   * is received from the main process.
-   * @param callback The function to call with the event data, which includes the server port.
+   * Asynchronously requests the server connection information from the main process.
+   * @returns A promise that resolves with an object containing the server port, or null if not yet available.
    */
-  onServerReady: (callback: (value: { port: number }) => void) => void;
+  requestServerInfo: () => Promise<{ port: number | null }>;
 }
 
 declare global {

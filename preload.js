@@ -3,11 +3,10 @@ const { contextBridge, ipcRenderer } = require('electron');
 // Securely expose a custom API to the renderer process (the frontend)
 contextBridge.exposeInMainWorld('electronAPI', {
   /**
-   * Sets up a listener for the 'server-ready' event sent from the main process.
-   * @param {function} callback - The function to execute when the event is received. 
-   *                              It will be passed the data from the main process (e.g., { port: 3001 }).
+   * Asynchronously requests the server connection information from the main process.
+   * @returns {Promise<{ port: number | null }>} A promise that resolves with the server port, or null if not yet available.
    */
-  onServerReady: (callback) => ipcRenderer.on('server-ready', (_event, value) => callback(value))
+  requestServerInfo: () => ipcRenderer.invoke('get-server-info')
 });
 
 window.addEventListener('DOMContentLoaded', () => {

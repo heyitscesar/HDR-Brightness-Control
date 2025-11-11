@@ -15,8 +15,8 @@ All detailed documentation for this project, including setup instructions, archi
 -   [Node.js](https://nodejs.org/en/) (v16+) installed.
 -   **Windows Operating System**.
 -   **DDC/CI Control Utilities:** At least one of the following is required:
-    -   **Primary:** `Monitorian.exe` available in your system's PATH.
-    -   **Fallback:** `ControlMyMonitor.exe` placed inside the `/server` directory.
+    -   **Primary:** `ControlMyMonitor.exe` placed inside the `/server` directory.
+    -   **Fallback:** `Monitorian.exe` available in your system's PATH.
 
 ### Installation
 

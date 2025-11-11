@@ -17,6 +17,7 @@ The system is a full-stack application now packaged within an **Electron** wrapp
 ### 2. Node.js Backend (`/server`)
 
 -   **Core Engine:** Serves as the central logic processor. It handles screen capturing, brightness calculation, and physical monitor control.
+-   **DDC/CI Abstraction:** On startup, a dedicated module first checks for `ControlMyMonitor.exe` in the local `/server` directory. If it's not found, it checks for `Monitorian.exe` in the system's PATH as a fallback.
 -   **Error Handling:** The server is hardened with global `process.on('uncaughtException')` and `process.on('unhandledRejection')` handlers to prevent crashes from unexpected errors. API endpoints include basic input validation.
 -   **State Management:** On first launch, it discovers all connected monitors and generates a `server/config.json` file. This file persists all user settings.
 -   **Communication Protocol:**

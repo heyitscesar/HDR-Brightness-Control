@@ -8,30 +8,31 @@ const execPromise = promisify(exec);
 const CONTROL_MY_MONITOR_PATH = path.join(__dirname, 'ControlMyMonitor.exe');
 const CMM_OUTPUT_FILE = path.join(__dirname, 'monitors.txt');
 
-let activeTool = null; // 'monitorian' or 'controlmymonitor'
+let activeTool = null; // 'controlmymonitor' or 'monitorian'
 let isInitialized = false;
 
 /**
  * Checks for the presence of the control executables and determines which one to use.
  */
 async function initialize() {
-    try {
-        // Try Monitorian first (check if it's in PATH)
-        await execPromise('where Monitorian.exe');
-        console.log('DDC/CI Control: Using Monitorian.exe (Primary)');
-        activeTool = 'monitorian';
-    } catch (error) {
-        // If Monitorian is not found, check for ControlMyMonitor locally
-        if (fs.existsSync(CONTROL_MY_MONITOR_PATH)) {
-            console.log('DDC/CI Control: Using ControlMyMonitor.exe (Fallback)');
-            activeTool = 'controlmymonitor';
-        } else {
-            console.error('DDC/CI Control Error: Neither Monitorian.exe nor ControlMyMonitor.exe could be found.');
+    // Try ControlMyMonitor first (check if it exists locally)
+    if (fs.existsSync(CONTROL_MY_MONITOR_PATH)) {
+        console.log('DDC/CI Control: Using ControlMyMonitor.exe (Primary)');
+        activeTool = 'controlmymonitor';
+    } else {
+        try {
+            // If CMM is not found, check for Monitorian in PATH as a fallback
+            await execPromise('where Monitorian.exe');
+            console.log('DDC/CI Control: Using Monitorian.exe (Fallback)');
+            activeTool = 'monitorian';
+        } catch (error) {
+            console.error('DDC/CI Control Error: Neither ControlMyMonitor.exe nor Monitorian.exe could be found.');
             activeTool = null;
         }
     }
     isInitialized = true;
 }
+
 
 /**
  * Gets a list of available monitor identifiers using the active tool.
@@ -39,15 +40,6 @@ async function initialize() {
  */
 async function getAvailableMonitors() {
     if (!activeTool) throw new Error('No DDC/CI control tool is available.');
-
-    if (activeTool === 'monitorian') {
-        const { stdout } = await execPromise('Monitorian.exe /get');
-        const devices = stdout.split('\n')
-            .map(line => line.trim())
-            .filter(line => line.match(/^\d+:/))
-            .map(line => line.split(':')[0]);
-        return { tool: activeTool, devices };
-    }
 
     if (activeTool === 'controlmymonitor') {
         // Use /smonitordeferred to save monitor list to a file
@@ -58,6 +50,17 @@ async function getAvailableMonitors() {
             .filter(line => line.startsWith('ID='))
             .map(line => line.substring(3)); // Extract value after "ID="
         fs.unlinkSync(CMM_OUTPUT_FILE); // Clean up the file
+        return { tool: activeTool, devices };
+    }
+    
+    if (activeTool === 'monitorian') {
+        // Use '/get all' to get the full, stable device path instead of the numeric alias.
+        const { stdout } = await execPromise('Monitorian.exe /get all');
+        const devices = stdout.split('\n')
+            .map(line => line.trim())
+            .filter(line => line.startsWith('DISPLAY\\'))
+            // The device path is everything before the first space followed by a quote.
+            .map(line => line.split(' "')[0]);
         return { tool: activeTool, devices };
     }
 
@@ -75,15 +78,20 @@ function setBrightness(deviceId, brightness) {
         if (!activeTool) {
             return reject(new Error('No DDC/CI control tool is available.'));
         }
+        
+        if (!deviceId) {
+            return reject(new Error('Cannot set brightness: Device ID is empty or invalid.'));
+        }
 
         const roundedBrightness = Math.round(brightness);
         let command;
 
-        if (activeTool === 'monitorian') {
-            command = `Monitorian.exe /set "${deviceId}" ${roundedBrightness} B`;
-        } else if (activeTool === 'controlmymonitor') {
+        if (activeTool === 'controlmymonitor') {
             // VCP code for brightness is 10
             command = `"${CONTROL_MY_MONITOR_PATH}" /SetValue "${deviceId}" 10 ${roundedBrightness}`;
+        } else if (activeTool === 'monitorian') {
+            // Monitorian can handle both numeric and full path device IDs.
+            command = `Monitorian.exe /set "${deviceId}" ${roundedBrightness} B`;
         } else {
             return reject(new Error('Unknown DDC/CI control tool.'));
         }
@@ -93,7 +101,8 @@ function setBrightness(deviceId, brightness) {
                 console.error(`[${deviceId}] DDC/CI Error with ${activeTool}: ${error.message}`);
                 reject(error);
             } else {
-                console.log(`[${deviceId}] DDC/CI Brightness set to ${roundedBrightness}% using ${activeTool}`);
+                // Keep console log concise for less noise
+                // console.log(`[${deviceId}] DDC/CI Brightness set to ${roundedBrightness}% using ${activeTool}`);
                 resolve();
             }
         });

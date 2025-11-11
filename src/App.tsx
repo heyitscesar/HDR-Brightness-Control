@@ -24,6 +24,7 @@ const App: React.FC = () => {
   const reconnectAttempts = useRef(0);
   const isUnmounted = useRef(false);
   const reconnectTimeoutId = useRef<number | null>(null);
+  const hasConnectedOnce = useRef(false);
   
   const connectWebSocket = useCallback((port: number) => {
     if (!port || isUnmounted.current) return;
@@ -35,9 +36,29 @@ const App: React.FC = () => {
     ws.current = new WebSocket(`ws://localhost:${port}`);
     setWsStatus('connecting');
 
-    ws.current.onopen = () => {
+    ws.current.onopen = async () => {
       setWsStatus('connected');
       reconnectAttempts.current = 0; // Reset on successful connection
+
+      if (hasConnectedOnce.current) {
+        // This is a RECONNECTION. Re-fetch the full monitor state to ensure consistency.
+        console.log("WebSocket reconnected. Re-fetching monitor state.");
+        try {
+          const data = await getMonitors();
+          if (!isUnmounted.current) {
+            setMonitors(data);
+            setIsDemoMode(false); // Ensure we are out of demo mode
+          }
+        } catch (err) {
+          console.error("Failed to re-fetch monitors after reconnect:", err);
+          if (!isUnmounted.current) {
+            setIsDemoMode(true);
+            setMonitors(getDemoData());
+          }
+        }
+      } else {
+        hasConnectedOnce.current = true;
+      }
     };
 
     ws.current.onmessage = (event) => {
@@ -53,6 +74,7 @@ const App: React.FC = () => {
     ws.current.onclose = () => {
       if (!isUnmounted.current) {
         setWsStatus('disconnected');
+        hasConnectedOnce.current = true; // Any close after the first attempt is a disconnect
         const delay = Math.min(MAX_RECONNECT_DELAY, 1000 * Math.pow(2, reconnectAttempts.current));
         reconnectAttempts.current++;
         if (reconnectTimeoutId.current) clearTimeout(reconnectTimeoutId.current);
@@ -65,30 +87,48 @@ const App: React.FC = () => {
     };
   }, []);
 
+  const initializeConnection = useCallback(async (isManualRetry = false) => {
+    if (isUnmounted.current) return;
+
+    setLoading(true);
+    setIsDemoMode(false);
+    // Clear any pending automatic reconnects since we're starting a new handshake.
+    if (reconnectTimeoutId.current) {
+        clearTimeout(reconnectTimeoutId.current);
+    }
+    reconnectAttempts.current = 0;
+    hasConnectedOnce.current = false;
+
+
+    try {
+      const serverInfo = await getServerInfo(isManualRetry);
+      setServerPort(serverInfo.wsPort);
+      
+      const data = await getMonitors();
+      if (isUnmounted.current) return;
+      
+      setMonitors(data);
+      connectWebSocket(serverInfo.wsPort);
+
+    } catch (err) {
+      if (isUnmounted.current) return;
+      console.warn("Failed to initialize connection:", err);
+      setIsDemoMode(true);
+      setMonitors(getDemoData());
+    } finally {
+      if (!isUnmounted.current) {
+        setLoading(false);
+      }
+    }
+  }, [connectWebSocket]);
+
   // Effect to handle the initial connection
   useEffect(() => {
     isUnmounted.current = false;
-
-    // Set a timeout to enter demo mode if the server doesn't connect in time
-    const connectionTimeout = setTimeout(() => {
-        if (isUnmounted.current || serverPort) return;
-        console.warn("Server connection timeout. Entering Demo Mode.");
-        setLoading(false);
-        setIsDemoMode(true);
-        setMonitors(getDemoData());
-    }, 10000);
-
-    // Get server info from the centralized service. This works in both Electron
-    // and web (fallback) contexts.
-    getServerInfo().then(serverInfo => {
-      if (isUnmounted.current) return;
-      clearTimeout(connectionTimeout);
-      setServerPort(serverInfo.wsPort);
-    });
+    initializeConnection();
 
     return () => {
       isUnmounted.current = true;
-      clearTimeout(connectionTimeout);
       if (reconnectTimeoutId.current) {
         clearTimeout(reconnectTimeoutId.current);
       }
@@ -97,43 +137,16 @@ const App: React.FC = () => {
         ws.current.close();
       }
     };
-  }, []); // Empty dependency array ensures this runs only once on mount
-
-
-  // Effect to fetch data and connect WebSocket once we know the server port
-  useEffect(() => {
-    if (!serverPort) return;
-
-    const fetchAndConnect = async () => {
-        try {
-            setLoading(true);
-            const data = await getMonitors();
-            setMonitors(data);
-            setIsDemoMode(false); // Success, so ensure we are not in demo mode
-            connectWebSocket(serverPort);
-        } catch (err: any) {
-            console.error("Failed to fetch monitors. Entering demo mode.", err);
-            setIsDemoMode(true);
-            setMonitors(getDemoData());
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    fetchAndConnect();
-  }, [serverPort, connectWebSocket]);
+  }, [initializeConnection]);
   
   const handleManualReconnect = useCallback(() => {
-    if (wsStatus === 'disconnected' && serverPort) {
-      console.log("Manual reconnect triggered.");
-      // Clear any pending automatic reconnect timeout
-      if (reconnectTimeoutId.current) {
-        clearTimeout(reconnectTimeoutId.current);
-      }
-      reconnectAttempts.current = 0; // Reset the backoff delay
-      connectWebSocket(serverPort); // Attempt to connect immediately
+    // If we're disconnected, a manual trigger should always attempt a full handshake.
+    // This correctly handles switching from Demo Mode to Live Mode and ensures data is fresh.
+    if (wsStatus === 'disconnected') {
+      console.log("Manual reconnect triggered: starting full connection handshake.");
+      initializeConnection(true);
     }
-  }, [wsStatus, serverPort, connectWebSocket]);
+  }, [wsStatus, initializeConnection]);
 
   const handleToggleActive = async (monitorId: string, isActive: boolean) => {
     const originalMonitors = [...monitors];
@@ -166,7 +179,7 @@ const App: React.FC = () => {
     await updateMonitorSettings(monitorId, settings, deviceId);
 
     // Update local state on success
-    setMonitors(monitors.map(m => m.id === monitorId ? { ...m, settings, deviceId } : m));
+    setMonitors(monitors.map(m => m.id === monitorId ? { ...m, settings, deviceId, error: null } : m));
     handleCloseSettings();
   };
   

@@ -5,35 +5,50 @@ interface ServerInfo {
     wsPort: number;
 }
 
-// A single promise that resolves with the server connection details.
-const serverInfoPromise: Promise<ServerInfo> = new Promise((resolve) => {
+let serverInfoCache: ServerInfo | null = null;
+
+export const getServerInfo = async (forceRefetch: boolean = false): Promise<ServerInfo> => {
+    if (serverInfoCache && !forceRefetch) {
+        return serverInfoCache;
+    }
+
     if (window.electronAPI) {
-        // Electron context: Get port from main process via IPC for dynamic port handling.
-        window.electronAPI.onServerReady(({ port }) => {
-            console.log(`API Service (Electron): Received server-ready event for port ${port}`);
-            resolve({
-                apiUrl: `http://localhost:${port}/api`,
-                wsPort: port,
-            });
-        });
+        // Electron context: Pull port from main process via IPC.
+        // Try for ~10 seconds to get the port.
+        for (let i = 0; i < 20; i++) { // 20 attempts * 500ms = 10 seconds
+            const { port } = await window.electronAPI.requestServerInfo();
+            if (port) {
+                console.log(`API Service (Electron): Received server port ${port}`);
+                const info = {
+                    apiUrl: `http://localhost:${port}/api`,
+                    wsPort: port,
+                };
+                serverInfoCache = info;
+                return info;
+            }
+            await new Promise(res => setTimeout(res, 500));
+        }
+        throw new Error("Timed out waiting for server port from main process.");
     } else {
         // Non-Electron context: Fallback for web deployment or testing.
-        // Assume the server is running on a fixed, hardcoded localhost port.
         console.warn("Electron API not found. Assuming web deployment and using hardcoded localhost:3001.");
-        const hardcodedPort = 3001; // This matches the dev server port.
-        resolve({
+        const hardcodedPort = 3001;
+        const info = {
             apiUrl: `http://localhost:${hardcodedPort}/api`,
             wsPort: hardcodedPort,
-        });
+        };
+        serverInfoCache = info;
+        return info;
     }
-});
+};
 
 
 /**
  * A resilient fetch wrapper that waits for the backend to be ready.
  */
 const apiFetch = async (endpoint: string, options?: RequestInit): Promise<Response> => {
-    const { apiUrl } = await serverInfoPromise;
+    // This will get the cached info or fetch it if it's the first time.
+    const { apiUrl } = await getServerInfo();
     
     const response = await fetch(`${apiUrl}${endpoint}`, options);
     if (!response.ok) {
@@ -42,15 +57,6 @@ const apiFetch = async (endpoint: string, options?: RequestInit): Promise<Respon
     }
     return response;
 };
-
-/**
- * Gets the server connection info. This is the new centralized way for the UI
- * to know where to connect.
- */
-export const getServerInfo = (): Promise<ServerInfo> => {
-    return serverInfoPromise;
-};
-
 
 export const getMonitors = async (): Promise<Monitor[]> => {
     const response = await apiFetch('/monitors');
