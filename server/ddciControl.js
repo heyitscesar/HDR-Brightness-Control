@@ -45,10 +45,24 @@ async function getAvailableMonitors() {
         // Use /smonitordeferred to save monitor list to a file
         await execPromise(`"${CONTROL_MY_MONITOR_PATH}" /smonitordeferred "${CMM_OUTPUT_FILE}"`);
         const data = fs.readFileSync(CMM_OUTPUT_FILE, 'utf-8');
-        const devices = data.split('\r\n')
-            .map(line => line.trim())
-            .filter(line => line.startsWith('ID='))
-            .map(line => line.substring(3)); // Extract value after "ID="
+
+        // Split the output by monitor blocks. Each block starts with '[Monitor'.
+        const blocks = data.split('[Monitor').slice(1);
+        const devices = blocks.map(block => {
+            const nameLine = block.split('\r\n').find(line => line.trim().startsWith('Name='));
+            if (nameLine) {
+                // Extract the value after "Name="
+                return nameLine.substring(nameLine.indexOf('=') + 1).trim();
+            }
+            // Fallback to ID if Name is not found
+            const idLine = block.split('\r\n').find(line => line.trim().startsWith('ID='));
+            if (idLine) {
+                 // Extract the value after "ID="
+                return idLine.substring(idLine.indexOf('=') + 1).trim();
+            }
+            return null;
+        }).filter(Boolean); // Filter out any null entries if a block is malformed
+
         fs.unlinkSync(CMM_OUTPUT_FILE); // Clean up the file
         return { tool: activeTool, devices };
     }

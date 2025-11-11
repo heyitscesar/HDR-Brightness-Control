@@ -307,7 +307,7 @@ async function initializeMonitors() {
  */
 async function runInitialBrightnessTest() {
   console.log('[TEST] Starting initial brightness test for all monitors...');
-  const testBrightnessLevels = [25, 50]; // Using values from user prompt.
+  const testBrightnessLevels = [20, 80, 50]; // A more visually distinct test sequence.
   const finalBrightness = testBrightnessLevels[testBrightnessLevels.length - 1];
   const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
