@@ -307,8 +307,8 @@ async function initializeMonitors() {
  */
 async function runInitialBrightnessTest() {
   console.log('[TEST] Starting initial brightness test for all monitors...');
-  const testBrightnessLevels = [20, 40];
-  const restoreBrightness = 60; // A sensible default to leave the monitors at.
+  const testBrightnessLevels = [25, 50]; // Using values from user prompt.
+  const finalBrightness = testBrightnessLevels[testBrightnessLevels.length - 1];
   const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
   for (const monitor of monitorsState) {
@@ -322,9 +322,8 @@ async function runInitialBrightnessTest() {
         await ddciControl.setBrightness(monitor.deviceId, level);
         await delay(500);
       }
-      // Restore brightness to a neutral level after the test flicker
-      await ddciControl.setBrightness(monitor.deviceId, restoreBrightness);
-      console.log(`[TEST] Test for ${monitor.name} successful. Brightness restored to ${restoreBrightness}%.`);
+      
+      console.log(`[TEST] Test for ${monitor.name} successful. Brightness left at ${finalBrightness}%.`);
       
       // If a previous test failed, clear the error on success.
       if (monitor.error && monitor.error.startsWith('[Test Failed]')) {
