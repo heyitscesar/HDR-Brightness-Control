@@ -25,15 +25,19 @@ function createWindow() {
     icon: iconPath // Set window icon
   });
 
-  mainWindow.loadFile(path.join(__dirname, 'index.html'));
-
   if (!app.isPackaged) {
-    // In dev mode, send the hardcoded port number directly after the window loads.
+    // In development, load from the Vite dev server URL
+    mainWindow.loadURL('http://localhost:5173');
+    // In dev mode, send the hardcoded server port number directly after the window loads.
     mainWindow.webContents.on('did-finish-load', () => {
-        console.log(`[Main Process] Dev mode detected. Notifying renderer of port ${DEV_PORT}.`);
+        console.log(`[Main Process] Dev mode detected. Notifying renderer of server port ${DEV_PORT}.`);
         mainWindow.webContents.send('server-ready', { port: DEV_PORT });
     });
+  } else {
+    // In production, load the built HTML file
+    mainWindow.loadFile(path.join(__dirname, 'dist', 'index.html'));
   }
+
 
   // Instead of quitting, hide the window to the tray
   mainWindow.on('close', (event) => {

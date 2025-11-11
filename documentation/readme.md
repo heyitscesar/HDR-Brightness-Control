@@ -1,25 +1,24 @@
 # Adaptive Monitor Brightness UI & Server
 
-A modern, full-stack application to control and fine-tune an adaptive brightness service for multiple monitors. It consists of a responsive React/TypeScript frontend and a powerful Node.js backend with a robust DDC/CI control system.
+A modern, full-stack application to control and fine-tune an adaptive brightness service for multiple monitors. It consists of a responsive React/TypeScript frontend and a powerful Node.js backend, packaged as a desktop application with Electron.
 
 ## Features
 
 -   **Robust DDC/CI Control:** The backend intelligently uses the best available tool to control monitor brightness. It prioritizes `Monitorian.exe` and automatically falls back to `ControlMyMonitor.exe` if needed.
 -   **Multi-Monitor Support:** View and manage all connected displays from a single dashboard.
 -   **UI-Based Device Mapping:** The settings UI lets you detect and select the correct device ID for whichever control tool is active, eliminating manual configuration.
--   **Resilient Real-Time Connection:** The application automatically attempts to reconnect if the server connection is lost, using an exponential backoff strategy to ensure stability.
--   **Graceful Fallback (Demo Mode):** If the backend server is not running, the UI loads with sample data, allowing you to explore its features.
+-   **Reliable Connection Handshake:** The application uses Electron's IPC to securely establish a connection between the frontend and backend, eliminating race conditions.
+-   **Resilient Real-Time Updates:** The UI automatically attempts to reconnect its WebSocket if the server connection is lost, using an exponential backoff strategy.
+-   **Graceful Fallback (Demo Mode):** If the backend server is not running or fails to connect, the UI loads with sample data, allowing you to explore its features.
 -   **State Persistence:** All your settings are saved to a `server/config.json` file, so your configuration is preserved across restarts.
--   **Resilient Connectivity:** The application automatically handles port conflicts by trying a series of fallback ports (3001-3006).
--   **Clear Error Feedback:** If the backend fails to control a monitor, a clear error message is displayed directly on the UI.
 
 ## How It Works
 
-This project is composed of a Node.js backend and a React frontend, now wrapped in an **Electron** desktop application shell.
+This project is composed of a Node.js backend and a React frontend, wrapped in an **Electron** desktop application shell.
 
 ### Backend (Node.js)
 
-The backend (`/server` directory) is the core of the operation. It is now launched automatically as a background process by the main Electron application.
+The backend (`/server` directory) is the core of the operation. It is launched automatically as a background process by the main Electron application.
 1.  **DDC/CI Abstraction:** On startup, a dedicated module checks for `Monitorian.exe` in the system PATH. If not found, it checks for `ControlMyMonitor.exe` in the `/server` directory. All brightness control commands are routed through this module.
 2.  **State Management:** It discovers monitors and creates/loads a `config.json` file to persist settings.
 3.  **Real-Time Communication:** It runs an Express.js server for API calls and a WebSocket server for pushing live data to the UI.
@@ -27,15 +26,15 @@ The backend (`/server` directory) is the core of the operation. It is now launch
 
 ### Frontend (React)
 
-The frontend (`/` root directory) provides the user interface, loaded inside the Electron window.
-1.  It dynamically probes ports to find and connect to the active backend server.
-2.  **Resilience:** If the connection to the backend is lost, the API service will automatically retry once after re-scanning for the server. The WebSocket will attempt to reconnect automatically.
-3.  If no backend can be found after these attempts, it enters a read-only **"Demo Mode"** with sample data.
+The frontend (`/src` directory) is a modern React/TypeScript application built with **Vite**. It runs inside the Electron window (the renderer process).
+1.  **Build System:** Vite provides a fast development server with Hot Module Replacement (HMR) for instant UI updates and creates a highly optimized build for the production application.
+2.  **Backend Communication:** The frontend no longer scans for ports. Instead, it waits for a secure message from the Electron main process (via IPC), which provides the exact port the backend server is running on. This creates a fast and reliable connection handshake.
+3.  **Resilience:** If no backend can be found, it enters a read-only **"Demo Mode"** with sample data.
 4.  The settings modal allows easy configuration, including a "Detect" button that gets a list of valid device IDs from the backend's active DDC/CI tool.
 
 ## Project Structure
 
-The project is now a unified Electron application.
+The project is a unified Electron application.
 
 ```
 /
@@ -44,8 +43,8 @@ The project is now a unified Electron application.
 ├── main.js                 # Electron main process entrypoint
 ├── preload.js              # Electron preload script
 ├── package.json            # Root package file for the Electron app
-├── index.html
-└── ... other files
+├── vite.config.ts
+└── index.html
 ```
 
 ## Getting Started
@@ -60,14 +59,14 @@ The project is now a unified Electron application.
 
 ### Installation
 
-First, install the dependencies for the backend server, then install the dependencies for the Electron application wrapper at the root.
+First, install the dependencies for the backend server, then install the dependencies for the root Electron/Vite application.
 
 ```bash
 # 1. Navigate to the server directory and install its dependencies
 cd server
 npm install
 
-# 2. Go back to the root and install Electron dependencies
+# 2. Go back to the root and install Electron & Vite dependencies
 cd ..
 npm install
 ```
@@ -78,7 +77,7 @@ There are two ways to run the app:
 
 **1. For Development (Recommended)**
 
-This command starts the backend server with hot-reloading (`nodemon`) and launches the Electron app. Changes to the server code will automatically restart it.
+This command starts the backend server with hot-reloading (`nodemon`), the Vite development server for the frontend, and launches the Electron app. Changes to server or UI code will automatically be reflected.
 
 ```bash
 # From the project root
@@ -87,7 +86,7 @@ npm run dev
 
 **2. For Production-like Testing**
 
-This command starts the Electron application just as it would run from the packaged `.exe`. It manages the backend server as a background process.
+This command starts the Electron application just as it would run from the packaged `.exe`. It manages the backend server as a background process and uses the built frontend code.
 
 ```bash
 # From the project root
@@ -99,7 +98,7 @@ npm start
 **"Demo Mode" Banner is Showing**
 This means the frontend could not connect to the backend.
 -   Ensure you are in the project's root directory when running `npm start` or `npm run dev`.
--   Check the terminal for any error messages from the server.
+-   Check the terminal for any error messages from the server or Vite.
 -   If the connection status is "Disconnected", the UI will automatically try to reconnect. If you restart the server, the UI should connect within a few seconds.
 
 **Brightness Isn't Changing**

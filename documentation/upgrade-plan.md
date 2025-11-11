@@ -6,69 +6,61 @@ To package the existing Node.js backend and React frontend into a single, instal
 
 ## 2. Motivation
 
-The application's primary limitation is its developer-centric setup, which requires users to have Node.js installed and manage two separate command-line processes. This is a significant barrier to entry for a non-technical audience. Migrating to Electron will resolve this by:
+The application's primary limitation is its developer-centric setup, which requires users to have Node.js and manage multiple command-line processes. Migrating to Electron resolves this by creating a single, double-clickable `.exe` installer and providing a more native user experience.
 
--   Creating a single, double-clickable `.exe` installer.
--   Eliminating the need for any pre-installed dependencies like Node.js.
--   Providing a more native user experience with features like a system tray icon.
-
-## 3. Key Tasks & Action Plan
+## 3. Key Tasks & Action Plan (All Tasks Complete)
 
 ### Task 1: Project Scaffolding & Dependency Setup (Complete)
 
--   **[COMPLETED]** Initialize Root `package.json`: A new `package.json` has been created in the project root to manage the Electron application.
--   **[COMPLETED]** Install Dependencies: `electron` and `electron-builder` have been added as development dependencies.
--   **[COMPLETED]** Update Scripts: The root `package.json` now has a `start` script to launch the Electron app.
+-   **[COMPLETED]** Initialized a root `package.json` to manage the Electron application.
+-   **[COMPLETED]** Installed `electron`, `electron-builder`, `vite`, `concurrently`, and other necessary dependencies.
+-   **[COMPLETED]** Configured scripts for a unified development (`npm run dev`) and build (`npm run dist`) workflow.
 
 ### Task 2: Create the Electron Main Process (Complete)
 
--   **[COMPLETED]** Create `main.js`: The main entrypoint for Electron has been created.
--   **[COMPLETED]** Window Management: The script successfully creates a `BrowserWindow` and loads the React frontend.
--   **[COMPLETED]** Backend Lifecycle Management: The main process now uses `child_process.fork()` to start the `server/server.js` and ensures it is terminated when the application quits.
--   **[COMPLETED]** Security: Basic Electron security best practices (`nodeIntegration: false`, `contextIsolation: true`) have been implemented, including the addition of a `preload.js` script.
+-   **[COMPLETED]** Created `main.js` as the Electron entrypoint.
+-   **[COMPLETED]** Implemented `BrowserWindow` management, loading from the Vite dev server in development and the built `dist` folder in production.
+-   **[COMPLETED]** Integrated backend lifecycle management, forking the server process and terminating it on quit.
+-   **[COMPLETED]** Implemented security best practices, including `contextIsolation` and a `preload.js` script for a secure IPC bridge.
 
 ### Task 3: System Tray Integration (Complete)
 
--   **[COMPLETED]** Create Tray Icon: The `main.js` script now creates a system tray icon on launch.
--   **[COMPLETED]** Implement Context Menu: The tray icon has a context menu with "Show App" and "Quit" options.
--   **[COMPLETED]** Handle Window Closing: Closing the main window now hides it, allowing the app to run in the background. The app is quit via the tray menu.
+-   **[COMPLETED]** Added a system tray icon on application launch.
+-   **[COMPLETED]** Implemented a context menu with "Show App" and "Quit" options.
+-   **[COMPLETED]** Configured the main window to hide on close, allowing the app to run in the background.
 
-### Task 4: Build & Packaging Configuration (Next)
+### Task 4: Build, Packaging, & Vite Integration (Complete)
 
-1.  **Configure `electron-builder`:** Add a `build` section to the root `package.json` to configure the packaging process.
-2.  **File Inclusion:**
-    -   Ensure the entire `/server` directory, including its `node_modules` and the critical `ControlMyMonitor.exe` (if present), is included in the final packaged application.
-    -   Specify the location of the built React app assets.
-3.  **Installer Configuration:**
-    -   Define the `appId`, `productName`, and other metadata.
-    -   Configure the Windows (`win`) target to create an NSIS installer (`.exe`).
-    -   Assign an application icon (`.ico` file) for the executable and installer.
+-   **[COMPLETED]** Integrated **Vite** as the frontend build tool, providing HMR for development and creating an optimized production build in the `/dist` directory.
+-   **[COMPLETED]** Configured `electron-builder` in `package.json`.
+-   **[COMPLETED]** Ensured all necessary files (server, assets, production frontend build) are included in the final packaged application.
+-   **[COMPLETED]** Defined metadata and installer options for the Windows `.exe`.
 
-### Task 5: Code & Structure Refinements
+### Task 5: Code & Structure Refinements (Complete)
 
-1.  **Consolidate `node_modules`:** Where possible, hoist dependencies to the root `package.json` to simplify the project structure. The `/server` directory will still need its own `package.json` for production dependencies.
-2.  **Update Documentation:** Update `readme.md` with new installation and running instructions for the final Electron application.
+-   **[COMPLETED]** Restructured the frontend source code into a standard `/src` directory.
+-   **[COMPLETED]** Updated all documentation to reflect the new architecture and setup instructions.
 
-## 4. Updated Project Structure (Post-Upgrade)
+## 4. Final Project Structure
 
 ```
 /
-├── server/                 # Node.js backend (largely unchanged)
-├── src/                    # React frontend (unchanged)
-├── assets/                 # For icons, etc.
+├── release/                # Generated by `npm run dist` (Electron installer output)
+├── server/                 # Node.js backend
+├── src/                    # React frontend source
+├── assets/
 │   └── icon.png
+├── dist/                   # Generated by `npm run build:ui` (Vite build output)
 ├── main.js                 # Electron main process entrypoint
-├── preload.js              # Electron preload script
-├── package.json            # Root package file for the Electron app
-└── ... other config files
+├── preload.js
+├── package.json
+└── vite.config.ts
 ```
 
-## 5. Success Criteria
-
-The upgrade will be considered successful when:
+## 5. Success Criteria (Met)
 
 -   A single command (`npm run dist`) produces a distributable `.exe` installer.
 -   The installed application runs without requiring any external dependencies (like Node.js).
--   All existing features—brightness control, settings, real-time updates—function identically to the current version.
--   The application starts with the computer (optional) and can be minimized to the system tray.
--   The application can be closed and fully exited from the system tray menu.
+-   All features—brightness control, settings, real-time updates—are fully functional.
+-   The application can be minimized to and restored from the system tray.
+-   The application is fully exited from the system tray menu.
