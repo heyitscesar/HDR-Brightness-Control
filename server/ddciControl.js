@@ -33,57 +33,80 @@ async function initialize() {
     isInitialized = true;
 }
 
-
 /**
- * Gets a list of available monitor identifiers using the active tool.
+ * Gets a list of available monitor identifiers (friendly names) using the active tool.
  * @returns {Promise<{tool: string, devices: string[]}>}
  */
 async function getAvailableMonitors() {
     if (!activeTool) throw new Error('No DDC/CI control tool is available.');
-
-    if (activeTool === 'controlmymonitor') {
-        // Use /smonitordeferred to save monitor list to a file
-        await execPromise(`"${CONTROL_MY_MONITOR_PATH}" /smonitordeferred "${CMM_OUTPUT_FILE}"`);
-        const data = fs.readFileSync(CMM_OUTPUT_FILE, 'utf-8');
-
-        // Split the output by monitor blocks. Each block starts with '[Monitor'.
-        const blocks = data.split('[Monitor').slice(1);
-        const devices = blocks.map(block => {
-            const nameLine = block.split('\r\n').find(line => line.trim().startsWith('Name='));
-            if (nameLine) {
-                // Extract the value after "Name="
-                return nameLine.substring(nameLine.indexOf('=') + 1).trim();
-            }
-            // Fallback to ID if Name is not found
-            const idLine = block.split('\r\n').find(line => line.trim().startsWith('ID='));
-            if (idLine) {
-                 // Extract the value after "ID="
-                return idLine.substring(idLine.indexOf('=') + 1).trim();
-            }
-            return null;
-        }).filter(Boolean); // Filter out any null entries if a block is malformed
-
-        fs.unlinkSync(CMM_OUTPUT_FILE); // Clean up the file
-        return { tool: activeTool, devices };
-    }
     
-    if (activeTool === 'monitorian') {
-        // Use '/get all' to get the full, stable device path instead of the numeric alias.
-        const { stdout } = await execPromise('Monitorian.exe /get all');
-        const devices = stdout.split('\n')
-            .map(line => line.trim())
-            .filter(line => line.startsWith('DISPLAY\\'))
-            // The device path is everything before the first space followed by a quote.
-            .map(line => line.split(' "')[0]);
-        return { tool: activeTool, devices };
-    }
+    // This function returns the friendly names for the UI dropdown.
+    const details = await getMonitorDetails();
+    const devices = details.map(d => d.name);
 
-    return { tool: 'none', devices: [] };
+    return { tool: activeTool || 'none', devices };
 }
 
 /**
+ * Gets detailed information (ID and Name) for all monitors from the active tool.
+ * @returns {Promise<Array<{id: string, name: string}>>}
+ */
+async function getMonitorDetails() {
+    if (!activeTool) return [];
+
+    if (activeTool === 'controlmymonitor') {
+        try {
+            await execPromise(`"${CONTROL_MY_MONITOR_PATH}" /smonitordeferred "${CMM_OUTPUT_FILE}"`);
+            const data = fs.readFileSync(CMM_OUTPUT_FILE, 'utf-8');
+
+            const blocks = data.split('[Monitor').slice(1);
+            const details = blocks.map(block => {
+                const lines = block.split('\r\n');
+                const nameLine = lines.find(line => line.trim().startsWith('Name='));
+                const idLine = lines.find(line => line.trim().startsWith('ID='));
+                if (nameLine && idLine) {
+                    return {
+                        name: nameLine.substring(nameLine.indexOf('=') + 1).trim(),
+                        id: idLine.substring(idLine.indexOf('=') + 1).trim()
+                    };
+                }
+                return null;
+            }).filter(Boolean);
+
+            fs.unlinkSync(CMM_OUTPUT_FILE); // Clean up the file
+            return details;
+        } catch (error) {
+            console.error("Failed to get monitor details from ControlMyMonitor:", error);
+            return [];
+        }
+    }
+    
+    if (activeTool === 'monitorian') {
+        try {
+            const { stdout } = await execPromise('Monitorian.exe /get all');
+            return stdout.split('\n')
+                .map(line => line.trim())
+                .filter(line => line.startsWith('DISPLAY\\'))
+                .map(line => {
+                    const match = line.match(/^(DISPLAY\\.*?)\s+"(.*?)"/);
+                    if (match && match[1] && match[2]) {
+                        return { id: match[1], name: match[2] };
+                    }
+                    return null;
+                }).filter(Boolean);
+        } catch (error) {
+            console.error("Failed to get monitor details from Monitorian:", error);
+            return [];
+        }
+    }
+
+    return [];
+}
+
+
+/**
  * Sets the brightness for a specific monitor using the active tool.
- * @param {string} deviceId - The identifier for the monitor.
+ * @param {string} deviceId - The identifier for the monitor (typically the friendly name).
  * @param {number} brightness - The brightness level (0-100).
  * @returns {Promise<void>}
  */
@@ -127,6 +150,7 @@ function setBrightness(deviceId, brightness) {
 module.exports = {
     initialize,
     getAvailableMonitors,
+    getMonitorDetails, // Export the new function
     setBrightness,
     isInitialized: () => isInitialized,
     getActiveTool: () => activeTool,

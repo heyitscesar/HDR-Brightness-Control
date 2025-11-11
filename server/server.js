@@ -255,6 +255,7 @@ async function initializeMonitors() {
   try {
     const displays = await screenshot.listDisplays();
     const savedStates = loadStateFromFile();
+    const ddciDetailsMap = await ddciControl.getMonitorDetails();
     
     const defaultSettings = {
       brightnessThreshold: 1,
@@ -268,7 +269,12 @@ async function initializeMonitors() {
 
     monitorsState = displays.map(d => {
       const saved = savedStates.find(s => s.id === d.id.toString());
-      const deviceId = saved?.deviceId || ''; // Default to empty string; user must configure it.
+      const ddciDetails = ddciDetailsMap.find(detail => detail.id === d.id.toString());
+
+      // Use the friendly name from DDC/CI if available, otherwise fallback to the system name.
+      const displayName = ddciDetails?.name || d.name;
+      // Prioritize a user-saved deviceId, then the auto-detected friendly name. This enables out-of-the-box functionality.
+      const deviceId = saved?.deviceId || ddciDetails?.name || '';
       let error = null;
 
       // If the monitor was saved as active but now has no device ID, it needs configuration.
@@ -278,7 +284,7 @@ async function initializeMonitors() {
 
       return {
         id: d.id.toString(),
-        name: d.name,
+        name: displayName,
         deviceId: deviceId,
         // It cannot be active if there's no device ID.
         isActive: saved?.isActive && !!deviceId ? true : false,
