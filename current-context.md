@@ -11,7 +11,7 @@ The system is a full-stack application composed of a Node.js backend and a React
 -   **Core Engine:** Serves as the central logic processor. It handles screen capturing, brightness calculation, and physical monitor control.
 -   **State Management:** On first launch, it discovers all connected monitors and generates a `server/config.json` file. This file persists all user settings (active state, algorithm parameters, monitor mappings) across sessions.
 -   **Communication Protocol:**
-    -   **REST API:** An Express.js server exposes endpoints for state-changing commands and configuration, including an endpoint (`/api/monitorian-devices`) to fetch valid device names from `Monitorian.exe`.
+    -   **REST API:** An Express.js server exposes endpoints for state-changing commands and configuration, including an endpoint to fetch valid device IDs from the active DDC/CI tool.
     -   **WebSockets:** A `ws` server runs in parallel to push real-time data to the frontend, including brightness updates, status changes, and operational errors.
 -   **Polling Mechanism:** The core adaptive brightness loop uses a robust **recursive `setTimeout` pattern**, which prevents overlapping executions and ensures stable performance.
 -   **Resilience:** The server automatically tries a series of fallback ports (3001-3006) to prevent `EADDRINUSE` conflicts.
@@ -20,9 +20,14 @@ The system is a full-stack application composed of a Node.js backend and a React
 ### 2. React Frontend (`/src`)
 
 -   **User Interface:** A single-page application built with React, TypeScript, and Tailwind CSS that functions as the control panel.
+-   **Component Structure:**
+    -   **Core Components (`src/components/core`):** High-level components that compose the main UI, such as `Header`, `MonitorCard`, and `SettingsModal`.
+    -   **UI Components (`src/components/ui`):** Generic, reusable building blocks like `Slider` and `Toggle`.
+    -   **Icons (`src/components/icons`):** A collection of SVG icons used throughout the application.
 -   **Graceful Degradation (Demo Mode):** If the frontend cannot connect to the backend on any of the specified ports, it automatically enters a "Demo Mode". It displays a clear banner and loads a static set of sample monitors, allowing the UI to be explored even without a live backend connection.
 -   **Real-Time Data:** When connected to a live backend, it establishes a persistent WebSocket connection. All data displayed on the monitor cards is pushed from the server in real-time.
--   **Advanced Configuration:** The settings modal includes a **UI for monitor mapping**. Users can automatically detect valid Monitorian device IDs and select the correct one from a dropdown, solving a primary usability issue.
+-   **Advanced Configuration:** The settings modal includes a UI for monitor mapping. Users can automatically detect valid device IDs from the backend and select the correct one from a dropdown.
+-   **Internationalization (i18n) Ready:** All user-facing strings are managed in a central JSON file (`src/translations/en.json`) and accessed via a custom `useI18n` hook, preparing the app for future language support.
 -   **Dynamic Discovery:** The frontend probes a list of fallback ports to find and connect to the active backend server's API and WebSocket.
 
 ---

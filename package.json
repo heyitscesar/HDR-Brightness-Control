@@ -1,21 +1,45 @@
 {
-  "name": "adaptive-monitor-brightness-ui",
-  "private": true,
-  "version": "0.0.0",
-  "type": "module",
+  "name": "adaptive-brightness-electron",
+  "version": "2.0.0",
+  "description": "An Electron application for adaptive monitor brightness control.",
+  "main": "main.js",
+  "author": "",
+  "license": "ISC",
   "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "preview": "vite preview"
+    "start": "electron .",
+    "dist": "electron-builder"
   },
-  "dependencies": {
-    "react": "^19.2.0",
-    "react-dom": "^19.2.0"
-  },
+  "dependencies": {},
   "devDependencies": {
-    "@types/node": "^22.14.0",
-    "@vitejs/plugin-react": "^5.0.0",
-    "typescript": "~5.8.2",
-    "vite": "^6.2.0"
+    "electron": "^29.1.0",
+    "electron-builder": "^24.13.3"
+  },
+  "build": {
+    "appId": "com.electron.adaptivebrightness",
+    "productName": "Adaptive Brightness Control",
+    "files": [
+      "main.js",
+      "preload.js",
+      "index.html",
+      "*.tsx",
+      "*.ts",
+      "components/**/*",
+      "hooks/**/*",
+      "services/**/*",
+      "translations/**/*",
+      "server/**/*",
+      "assets/**/*"
+    ],
+    "directories": {
+      "buildResources": "assets"
+    },
+    "win": {
+      "target": "nsis",
+      "icon": "assets/icon.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    }
   }
 }

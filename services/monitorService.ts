@@ -1,101 +1,86 @@
 import { Monitor, MonitorSettings } from '../types';
-import { getDemoData } from './demoData';
 
-const PORTS_TO_TRY = [3001, 3002, 3003, 3004, 3005, 3006];
 let activeApiUrl: string | null = null;
-let discoveryPromise: Promise<string | null> | null = null;
+let serverReadyPromise: Promise<string>;
 
-const discoverActiveApiUrl = async (): Promise<string | null> => {
-    if (activeApiUrl) {
-        return activeApiUrl;
-    }
+// This check is important because in a non-electron environment (like tests or a future web version),
+// window.electronAPI might not exist.
+if (window.electronAPI) {
+    serverReadyPromise = new Promise((resolve, reject) => {
+        // Resolve the promise with the correct URL when the main process signals readiness
+        window.electronAPI.onServerReady(({ port }) => {
+            console.log(`API Service: Received server-ready event for port ${port}`);
+            const url = `http://localhost:${port}/api`;
+            activeApiUrl = url;
+            resolve(url);
+        });
+    });
+} else {
+    // Fallback for non-Electron environments or if the preload script fails
+    console.warn("Electron API not found. Service will not function correctly.");
+    serverReadyPromise = Promise.reject(new Error("Electron API not available"));
+}
 
-    for (const port of PORTS_TO_TRY) {
-        try {
-            const url = `http://localhost:${port}`;
-            const response = await fetch(`${url}/api/health`, { signal: AbortSignal.timeout(300) });
-            if (response.ok) {
-                console.log(`Backend found on port ${port}`);
-                activeApiUrl = `${url}/api`;
-                return activeApiUrl;
-            }
-        } catch (error) {
-            // This is expected if a port is not open, so we don't log it to reduce console noise.
-        }
-    }
 
-    console.warn('Could not connect to the backend server. Entering Demo Mode.');
-    return null;
+const getActiveApiUrl = (): Promise<string> => {
+    // This promise will now wait until the `onServerReady` event is fired.
+    return serverReadyPromise;
 };
 
-const getActiveApiUrl = (): Promise<string | null> => {
-    if (!discoveryPromise) {
-        discoveryPromise = discoverActiveApiUrl();
+/**
+ * A resilient fetch wrapper that waits for the backend to be ready.
+ */
+const apiFetch = async (endpoint: string, options?: RequestInit): Promise<Response> => {
+    // This will wait until the server-ready event has been received and the promise has resolved.
+    const apiUrl = await getActiveApiUrl();
+    
+    const response = await fetch(`${apiUrl}${endpoint}`, options);
+    if (!response.ok) {
+        throw new Error(`Request to ${endpoint} failed with status ${response.status}`);
     }
-    return discoveryPromise;
+    return response;
 };
 
 
 export const getMonitors = async (): Promise<Monitor[]> => {
-  const apiUrl = await getActiveApiUrl();
-  if (!apiUrl) {
-      return getDemoData();
-  }
-  
-  const response = await fetch(`${apiUrl}/monitors`);
-  if (!response.ok) {
-    console.error('Failed to fetch monitors from the backend. Is the server running?');
-    return getDemoData();
-  }
-  return await response.json();
+    const response = await apiFetch('/monitors');
+    return await response.json();
 };
 
 export const getDDCIDevices = async (): Promise<{tool: string, devices: string[]}> => {
-    const apiUrl = await getActiveApiUrl();
-    if (!apiUrl) {
-        console.warn('Demo Mode: Suppressing fetch for DDC/CI devices.');
-        return { tool: 'demo', devices: ['1', '2', '\\\\.\\DISPLAY1'] };
-    }
     try {
-        const response = await fetch(`${apiUrl}/ddci-devices`);
-        if (!response.ok) {
-            throw new Error('Failed to fetch DDC/CI devices');
-        }
+        const response = await apiFetch('/ddci-devices');
         return await response.json();
     } catch (error) {
-        console.error(error);
+        console.error('Failed to fetch DDC/CI devices:', error);
         return { tool: 'error', devices: [] };
     }
 };
 
 export const updateMonitorSettings = async (monitorId: string, settings: MonitorSettings, deviceId: string): Promise<boolean> => {
-    const apiUrl = await getActiveApiUrl();
-    if (!apiUrl) {
-        console.warn(`Demo Mode: Suppressing settings update for monitor ${monitorId}`);
-        return true;
+    try {
+        const response = await apiFetch(`/monitors/${monitorId}/settings`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ settings, deviceId }),
+        });
+        return response.ok;
+    } catch (error) {
+        console.error(`Failed to update settings for monitor ${monitorId}:`, error);
+        return false;
     }
-    const response = await fetch(`${apiUrl}/monitors/${monitorId}/settings`, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ settings, deviceId }),
-    });
-    return response.ok;
 };
 
 export const toggleAutoBrightness = async (monitorId: string, isActive: boolean): Promise<boolean> => {
-    const apiUrl = await getActiveApiUrl();
-    if (!apiUrl) {
-        console.warn(`Demo Mode: Suppressing toggle for monitor ${monitorId}`);
-        return true;
+    try {
+        const response = await apiFetch(`/monitors/${monitorId}/toggle`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ isActive }),
+        });
+        return response.ok;
+    } catch (error) {
+        console.error(`Failed to toggle auto-brightness for monitor ${monitorId}:`, error);
+        return false;
     }
-    const response = await fetch(`${apiUrl}/monitors/${monitorId}/toggle`, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ isActive }),
-    });
-    return response.ok;
-}
+};

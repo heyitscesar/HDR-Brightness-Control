@@ -132,6 +132,7 @@ async function runAdaptiveBrightness(monitor) {
       if (monitor.error) monitor.error = null;
     }
   } catch (error) {
+    console.error(`Error processing monitor ${monitor.name} (${monitor.id}):`, error.message);
     monitor.error = `DDC/CI Error: ${error.message}. Check device ID in settings.`;
     toggleService(monitor, false); // Stop on error
   } finally {
@@ -170,7 +171,6 @@ function toggleService(monitor, start) {
 app.get('/api/health', (req, res) => res.status(200).json({ status: 'ok' }));
 app.get('/api/monitors', (req, res) => res.json(monitorsState));
 
-// ** UPGRADED ENDPOINT for generic DDC/CI device mapping **
 app.get('/api/ddci-devices', async (req, res) => {
   try {
     const result = await ddciControl.getAvailableMonitors();
@@ -184,8 +184,12 @@ app.get('/api/ddci-devices', async (req, res) => {
 app.post('/api/monitors/:id/toggle', (req, res) => {
   const { id } = req.params;
   const { isActive } = req.body;
-  const monitor = monitorsState.find(m => m.id === id);
 
+  if (typeof isActive !== 'boolean') {
+    return res.status(400).json({ message: 'Invalid payload: isActive must be a boolean.' });
+  }
+
+  const monitor = monitorsState.find(m => m.id === id);
   if (!monitor) return res.status(404).json({ message: 'Monitor not found' });
 
   toggleService(monitor, isActive);
@@ -196,8 +200,12 @@ app.post('/api/monitors/:id/toggle', (req, res) => {
 app.post('/api/monitors/:id/settings', (req, res) => {
     const { id } = req.params;
     const { settings, deviceId } = req.body;
-    const monitorIndex = monitorsState.findIndex(m => m.id === id);
 
+    if (!settings || typeof settings !== 'object' || typeof deviceId !== 'string') {
+        return res.status(400).json({ message: 'Invalid payload: must provide settings object and deviceId string.' });
+    }
+
+    const monitorIndex = monitorsState.findIndex(m => m.id === id);
     if (monitorIndex === -1) return res.status(404).json({ message: 'Monitor not found' });
 
     const monitor = monitorsState[monitorIndex];
@@ -205,7 +213,16 @@ app.post('/api/monitors/:id/settings', (req, res) => {
 
     if (wasActive) toggleService(monitor, false);
 
-    monitorsState[monitorIndex].settings = { ...monitor.settings, ...settings };
+    // Only update known settings to prevent injection of unknown properties
+    const allowedSettings = Object.keys(monitor.settings);
+    const sanitizedSettings = { ...monitor.settings };
+    for (const key of allowedSettings) {
+        if (settings[key] !== undefined) {
+            sanitizedSettings[key] = settings[key];
+        }
+    }
+
+    monitorsState[monitorIndex].settings = sanitizedSettings;
     monitorsState[monitorIndex].deviceId = deviceId;
 
     console.log(`Updated settings for ${monitor.name}`);
@@ -237,7 +254,6 @@ async function initializeMonitors() {
 
     monitorsState = displays.map(d => {
       const saved = savedStates.find(s => s.id === d.id.toString());
-      // Default deviceId guess (handles both Monitorian "1" and CMM "\\.\DISPLAY1")
       const match = d.name.match(/(\d+)$/);
       const defaultDeviceId = ddciControl.getActiveTool() === 'monitorian' 
         ? (match ? match[1] : d.name) 
@@ -248,7 +264,7 @@ async function initializeMonitors() {
         name: d.name,
         deviceId: saved?.deviceId || defaultDeviceId,
         isActive: saved?.isActive || false,
-        settings: saved?.settings || { ...defaultSettings },
+        settings: { ...defaultSettings, ...(saved?.settings || {}) },
         // Transient state
         currentScreenBrightness: 0,
         targetMonitorBrightness: 0,
@@ -262,8 +278,8 @@ async function initializeMonitors() {
 
     monitorsState.forEach(m => {
         if (m.isActive) {
-            m.isActive = false; 
-            toggleService(m, true);
+            const monitorToStart = { ...m, isActive: false }; // Ensure it starts fresh
+            toggleService(monitorToStart, true);
         }
     });
 
@@ -285,6 +301,10 @@ function startServer(ports) {
 
     server.on('listening', () => {
         console.log(`Server with WebSocket running on http://localhost:${port}`);
+        // Signal to the parent process (main.js) that the server is ready
+        if (process.send) {
+            process.send({ status: 'ready', port });
+        }
     });
 
     server.on('error', (err) => {
@@ -298,16 +318,34 @@ function startServer(ports) {
     });
 }
 
-// --- Main Execution ---
+// --- Main Execution & Global Error Handling ---
 (async () => {
-    console.log("Initializing DDC/CI control module...");
-    await ddciControl.initialize();
-    if (!ddciControl.isInitialized() || !ddciControl.getActiveTool()) {
-        console.error("Could not initialize DDC/CI control. Exiting.");
+    try {
+        console.log("Initializing DDC/CI control module...");
+        await ddciControl.initialize();
+        if (!ddciControl.isInitialized() || !ddciControl.getActiveTool()) {
+            console.error("Could not initialize DDC/CI control. Please ensure Monitorian.exe or ControlMyMonitor.exe is available. Exiting.");
+            process.exit(1);
+        }
+        console.log("Initializing monitor configuration...");
+        await initializeMonitors();
+        console.log("Initialization complete. Starting server...");
+        startServer(PORTS_TO_TRY);
+    } catch (initError) {
+        console.error("A critical error occurred during initialization:", initError);
         process.exit(1);
     }
-    console.log("Initializing monitor configuration...");
-    await initializeMonitors();
-    console.log("Initialization complete. Starting server...");
-    startServer(PORTS_TO_TRY);
 })();
+
+process.on('uncaughtException', (error, origin) => {
+    console.error(`\n--- Uncaught Exception at: ${origin} ---`);
+    console.error(error);
+    console.error("Server is in an unstable state. Shutting down.");
+    process.exit(1);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+    console.error('\n--- Unhandled Promise Rejection ---');
+    console.error('Reason:', reason);
+    console.error('Promise:', promise);
+});
