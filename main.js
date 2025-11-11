@@ -8,6 +8,7 @@ let tray;
 
 const serverPath = path.join(__dirname, 'server', 'server.js');
 const iconPath = path.join(__dirname, 'assets', 'icon.png'); // Path for the tray icon
+const DEV_PORT = 3001; // Fixed port for development
 
 function createWindow() {
   const preloadPath = path.join(__dirname, 'preload.js');
@@ -25,6 +26,14 @@ function createWindow() {
   });
 
   mainWindow.loadFile(path.join(__dirname, 'index.html'));
+
+  if (!app.isPackaged) {
+    // In dev mode, send the hardcoded port number directly after the window loads.
+    mainWindow.webContents.on('did-finish-load', () => {
+        console.log(`[Main Process] Dev mode detected. Notifying renderer of port ${DEV_PORT}.`);
+        mainWindow.webContents.send('server-ready', { port: DEV_PORT });
+    });
+  }
 
   // Instead of quitting, hide the window to the tray
   mainWindow.on('close', (event) => {
@@ -65,7 +74,11 @@ function startServer() {
 }
 
 app.on('ready', () => {
-    startServer();
+    // Only fork the server process in the packaged (production) app
+    if (app.isPackaged) {
+        startServer();
+    }
+
     createWindow();
 
     // --- System Tray Setup ---

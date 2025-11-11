@@ -58,11 +58,7 @@ The project is now a unified Electron application.
     -   **Primary:** Download `Monitorian.exe` from its [GitHub page](https://github.com/emoacht/Monitorian/releases) and ensure it is in your system's PATH.
     -   **Fallback:** Download `ControlMyMonitor.exe` from [Nirsoft](https://www.nirsoft.net/utils/control_my_monitor.html) and place the `.exe` file inside the `/server` directory.
 
-### Installation & Running
-
-The application is now packaged with Electron, which bundles the frontend and backend into a single desktop application.
-
-**1. Install Dependencies**
+### Installation
 
 First, install the dependencies for the backend server, then install the dependencies for the Electron application wrapper at the root.
 
@@ -76,9 +72,22 @@ cd ..
 npm install
 ```
 
-**2. Run the Application**
+### Running the Application
 
-Start the application from the root directory. This will launch the desktop window and start the backend server automatically.
+There are two ways to run the app:
+
+**1. For Development (Recommended)**
+
+This command starts the backend server with hot-reloading (`nodemon`) and launches the Electron app. Changes to the server code will automatically restart it.
+
+```bash
+# From the project root
+npm run dev
+```
+
+**2. For Production-like Testing**
+
+This command starts the Electron application just as it would run from the packaged `.exe`. It manages the backend server as a background process.
 
 ```bash
 # From the project root
@@ -89,8 +98,8 @@ npm start
 
 **"Demo Mode" Banner is Showing**
 This means the frontend could not connect to the backend.
--   Ensure you ran `npm start` from the project's root directory.
--   Check the terminal where you ran `npm start` for any error messages from the server.
+-   Ensure you are in the project's root directory when running `npm start` or `npm run dev`.
+-   Check the terminal for any error messages from the server.
 -   If the connection status is "Disconnected", the UI will automatically try to reconnect. If you restart the server, the UI should connect within a few seconds.
 
 **Brightness Isn't Changing**

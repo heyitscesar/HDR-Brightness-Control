@@ -14,6 +14,8 @@ const wss = new WebSocketServer({ server });
 
 const PORTS_TO_TRY = [3001, 3002, 3003, 3004, 3005, 3006];
 const CONFIG_PATH = path.join(__dirname, 'config.json');
+const isDev = process.env.NODE_ENV === 'development';
+const DEV_PORT = 3001;
 
 app.use(cors());
 app.use(express.json());
@@ -289,7 +291,7 @@ async function initializeMonitors() {
   }
 }
 
-function startServer(ports) {
+function startProdServer(ports) {
     if (!ports.length) {
         console.error("All fallback ports are in use. Could not start server.");
         process.exit(1);
@@ -310,7 +312,7 @@ function startServer(ports) {
     server.on('error', (err) => {
         if (err.code === 'EADDRINUSE') {
             console.warn(`Port ${port} is in use, trying next port...`);
-            startServer(ports.slice(1));
+            startProdServer(ports.slice(1));
         } else {
             console.error("Server startup error:", err);
             process.exit(1);
@@ -330,7 +332,21 @@ function startServer(ports) {
         console.log("Initializing monitor configuration...");
         await initializeMonitors();
         console.log("Initialization complete. Starting server...");
-        startServer(PORTS_TO_TRY);
+        
+        if (isDev) {
+            // In dev mode, use a fixed port and skip the port-finding logic.
+            server.listen(DEV_PORT, () => {
+                console.log(`[DEV MODE] Server with WebSocket running on http://localhost:${DEV_PORT}`);
+            });
+            server.on('error', (err) => {
+                console.error("[DEV MODE] Server startup error:", err);
+                process.exit(1);
+            });
+        } else {
+            // In production, use the port-finding logic and signal Electron.
+            startProdServer(PORTS_TO_TRY);
+        }
+
     } catch (initError) {
         console.error("A critical error occurred during initialization:", initError);
         process.exit(1);
