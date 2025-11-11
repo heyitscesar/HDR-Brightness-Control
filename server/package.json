@@ -5,7 +5,7 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "dev": "cross-env NODE_ENV=development nodemon server.js"
+    "dev": "nodemon --ignore config.json server.js"
   },
   "author": "",
   "license": "ISC",
@@ -17,7 +17,6 @@
     "ws": "^8.17.0"
   },
   "devDependencies": {
-    "cross-env": "^7.0.3",
     "nodemon": "^3.1.0"
   }
 }

@@ -14,7 +14,9 @@ const wss = new WebSocketServer({ server });
 
 const PORTS_TO_TRY = [3001, 3002, 3003, 3004, 3005, 3006];
 const CONFIG_PATH = path.join(__dirname, 'config.json');
-const isDev = process.env.NODE_ENV === 'development';
+// In dev mode (running via `npm run dev`), the server is not a child process, so `process.send` will be falsy.
+// In production (forked by Electron's main.js), `process.send` will be a function.
+const isDev = !process.send;
 const DEV_PORT = 3001;
 
 app.use(cors());
