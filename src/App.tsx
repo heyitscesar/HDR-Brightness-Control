@@ -178,7 +178,7 @@ const App: React.FC = () => {
     // This function will now propagate errors to the modal
     await updateMonitorSettings(monitorId, settings, deviceId);
 
-    // Update local state on success
+    // Update local state on success, and clear any previous errors
     setMonitors(monitors.map(m => m.id === monitorId ? { ...m, settings, deviceId, error: null } : m));
     handleCloseSettings();
   };

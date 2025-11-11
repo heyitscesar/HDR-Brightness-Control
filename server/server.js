@@ -303,6 +303,7 @@ async function initializeMonitors() {
 
 /**
  * Runs a quick brightness test on all monitors to confirm DDC/CI control.
+ * This test updates the monitor's state with an error if it fails.
  */
 async function runInitialBrightnessTest() {
   console.log('[TEST] Starting initial brightness test for all monitors...');
@@ -324,9 +325,20 @@ async function runInitialBrightnessTest() {
       // Restore brightness to a neutral level after the test flicker
       await ddciControl.setBrightness(monitor.deviceId, restoreBrightness);
       console.log(`[TEST] Test for ${monitor.name} successful. Brightness restored to ${restoreBrightness}%.`);
+      
+      // If a previous test failed, clear the error on success.
+      if (monitor.error && monitor.error.startsWith('[Test Failed]')) {
+        monitor.error = null;
+      }
     } catch (error) {
       console.error(`[TEST] FAILED for monitor ${monitor.name}. Error: ${error.message}`);
-      // Don't throw, just log the error and continue to the next monitor.
+      // Set an error on the monitor state so the UI can display it.
+      monitor.error = `[Test Failed] DDC/CI command failed: ${error.message}. Check if the correct Device ID is selected in settings.`;
+      // Forcibly disable a monitor that fails the test.
+      if (monitor.isActive) {
+        console.log(`[TEST] Deactivating monitor ${monitor.name} due to failed test.`);
+        monitor.isActive = false;
+      }
     }
   }
   console.log('[TEST] Initial brightness test complete.');
@@ -386,9 +398,8 @@ function startProdServer(ports) {
         console.log("Initializing monitor configuration...");
         await initializeMonitors();
 
-        // --- ADDED FOR TESTING PURPOSES ---
+        // Run the diagnostic test before starting services.
         await runInitialBrightnessTest();
-        // ------------------------------------
         
         // Now that the test is done, start services for any monitors marked as active.
         startActiveServices();
